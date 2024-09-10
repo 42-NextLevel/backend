@@ -19,5 +19,5 @@ CREATE DATABASE 'DBNAME' ENCODING 'UTF-8' OWNER dongkseo
 ```
 5. user에 권한 부여
 ```sql
-GRANT CONNECT ON DATABASE transecendence TO dongkseo;
+GRANT CONNECT ON DATABASE transcendence TO dongkseo;
 ```
