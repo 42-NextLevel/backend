@@ -1,0 +1,10 @@
+# .gitignore
+../bin/
+../include/
+../lib/
+../lib64
+../pyvenv.cfg
+*.pyc
+__pycache__/
+.DS_Store
+.env
