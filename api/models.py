@@ -12,19 +12,28 @@ class User(models.Model):
 		return self.intra_id
 	
 	@classmethod
-	def get_or_create(cls, intra_id, profile_image):
+	def create(cls, intra_id, profile_image):
+		user = cls.objects.create(
+			intra_id=intra_id,
+			profile_image=profile_image,
+			email=None
+		)
+		return user
+	
+	@classmethod
+	def get_by_intra_id(cls, intra_id):
 		try:
-			user = cls.objects.get(filter(intra_id=intra_id))
-			user.save()
-			CREATE = False
-		except ObjectDoesNotExist:
-			user = cls.objects.create(
-				intra_id=intra_id,
-				profile_image=profile_image,
-				email=None
-			)
-			CREATE = True
-		return user, CREATE
+			return cls.objects.get(intra_id=intra_id)
+		except cls.DoesNotExist:
+			return None
+
+	@classmethod
+	def get(cls, intra_id):
+		try:
+			return cls.objects.get(intra_id=intra_id)
+		except cls.DoesNotExist:
+			return None
+	
 	class Meta:
 		db_table = 'users'
 
