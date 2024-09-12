@@ -223,3 +223,4 @@ class SendEmailView(APIView):
 		
 	def post(self, request):
 		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
