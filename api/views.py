@@ -4,47 +4,65 @@ from rest_framework import status
 from django.apps import apps
 import requests
 import os
-from django.db import models
+from django.conf import settings
+from django.core import signing
+from .models import User
 from dotenv import load_dotenv
+from django.core.cache import cache
+from .utils import EmailManager, CookieManager
+from django.core.mail import BadHeaderError
+from .serializers import UserCreateSerializer, UserEmailUpdateSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework import status
+from . import utils
 
 load_dotenv()
 
+import sys
 
-# Create your views here.
-
-class AuthView(APIView):
+class AuthCodeView(APIView):
 	def post(self, request):
 		code = request.data.get('code')
-		# redis_instance = apps.get_app_config('api').redis
 		
 		if not code:
 			return Response({'registered': False, 'error': 'No code provided'}, status=status.HTTP_400_BAD_REQUEST)
 		
 		try:
 			access_token = self.get_42_token(code)
-
-			if not access_token:
-				raise Exception("Failed to obtain access token")
-			
 			intra_id, user_image = self.get_user_info(access_token)
-
-			user, CREATED = models.User.get_or_create(intra_id, user_image)
-
-			if CREATED or user.email is None:
-				return Response({'registered': False}, status=status.HTTP_200_OK)
-				
+			
+			print(intra_id, file=sys.stderr)
+			print(user_image, file=sys.stderr)
+			# user = User.get_or_create(intra_id, user_image)
+			user = User.get(intra_id)
+			if not user:
+				serializer = UserCreateSerializer(data={'intra_id': intra_id, 'profile_image': user_image})  
+				if not serializer.is_valid():
+					return Response({'registered': False, 'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+				user = serializer.save()
+			if not user.email:
+				response = Response({'registered': False}, status=status.HTTP_200_OK)
+				CookieManager.set_intra_id_cookie(response, intra_id)
+				return response
+			
+			
+			try:
+				auth_code = EmailManager.send_Auth_email(user.email)
+				cache.set(intra_id, auth_code, timeout=3600)
+			except BadHeaderError:
+				return Response({'error': 'Failed to send email'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+			
+			response = Response({'registered': True}, status=status.HTTP_200_OK)
+			return CookieManager.set_intra_id_cookie(response, intra_id)
+			
 		except Exception as e:
 			return Response({'registered': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
-		response = Response({'registered': True}, status=status.HTTP_200_OK)
-		return response
-
-
 	def get_42_token(self, code):
-		# Get the access token from 42 API
-		CLIENT_ID = os.environ.get('CLIENT_ID')
-		CLIENT_SECRET = os.environ.get('CLIENT_SECRET')
+		CLIENT_ID = os.environ.get('42_ID')
+		CLIENT_SECRET = os.environ.get('42_SECRET')
 		REDIRECT_URI = "https://example.com/callback"
 		TOKEN_URL = "https://api.intra.42.fr/oauth/token"
 		token_data = {
@@ -55,29 +73,153 @@ class AuthView(APIView):
 			"redirect_uri": REDIRECT_URI
 		}
 
-		response = requests.post(TOKEN_URL, data=token_data)
-		if response.status_code != 200:
-			raise Exception("Failed to obtain access token")
-		return response.json().get('access_token')
+		try:
+			response = requests.post(TOKEN_URL, data=token_data)
+			response.raise_for_status()  # Raises an HTTPError for bad responses
+			return response.json().get('access_token')
+		except requests.RequestException as e:
+			raise Exception(f"Failed to obtain access token: {str(e)}")
 	
 	def get_user_info(self, access_token):
-		# Get the user info from 42 API
 		USER_URL = "https://api.intra.42.fr/v2/me"
 		headers = {
 			"Authorization": f"Bearer {access_token}",
 		}
-		response = requests.get(USER_URL, headers=headers)
-		if response.status_code != 200:
-			raise Exception("Failed to obtain user info")
-		user_data = response.json()
-		intra_id = user_data.get('id')
-		user_image = user_data.get('image', {}).get('link')  # 유저 이미지 URL
-
-		return intra_id, user_image
-
+		try:
+			response = requests.get(USER_URL, headers=headers)
+			response.raise_for_status()
+			user_data = response.json()
+			intra_id = user_data.get('login')
+			user_image = user_data.get('image', {}).get('link')
+			return intra_id, user_image
+		except requests.RequestException as e:
+			raise Exception(f"Failed to obtain user info: {str(e)}")
 
 	def get(self, request):
 		return Response({'error': 'GET method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 		
 		
+class AuthEmailView(APIView):
+
+	# def get_intra_id_from_cookie(self, request):
+	# 	signed_value = request.COOKIES.get('intra_id')
+	# 	if signed_value:
+	# 		try:
+	# 			intra_id = signing.loads(signed_value, salt='intra-id-cookie', key=settings.SECRET_KEY)
+	# 			return intra_id
+	# 		except signing.BadSignature:
+	# 			return None
+	# 	return None
+
+	def post(self, request):
+		intra_id = CookieManager.get_intra_id_from_cookie(request)
+		if not intra_id:
+			return Response({'error': 'Invalid intra_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+		user = User.get_by_intra_id(intra_id)
+		
+		if not user:
+			return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+		
+		serializer = UserEmailUpdateSerializer(user, data=request.data)
+		if serializer.is_valid():
+			email = serializer.validated_data.get('email')
+			if not EmailManager.validate_email(email):
+				return Response(status=status.HTTP_400_BAD_REQUEST)
+		
+			try:
+				code = EmailManager.send_Auth_email(email)
+				cache.set(intra_id, code, timeout=300)
+			except BadHeaderError:
+				return Response(status=status.HTTP_400_BAD_REQUEST)
+		
+			serializer.save()
+			return Response(status=status.HTTP_200_OK)
+		return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+	def get(self, request):
+		return Response({'error': 'GET method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+	
+	
+class AuthTokenView(APIView):
+	def post(self, request):
+		intra_id = CookieManager.get_intra_id_from_cookie(request)
+		if not intra_id:
+			return Response(status=status.HTTP_400_BAD_REQUEST)
+		if not EmailManager.varify_auth_code(intra_id, request):
+			return Response(status=status.HTTP_400_BAD_REQUEST)
+		user = User.get_by_intra_id(intra_id)
+		if not user:
+			return Response(status=status.HTTP_404_NOT_FOUND)
+		
+		refresh = RefreshToken.for_user(user)
+		refresh['intra_id'] = user.intra_id
+		response = Response({
+			'access': str(refresh.access_token),
+		}, status.HTTP_200_OK)
+		response.set_cookie('refresh_token', str(refresh), httponly=True, samesite='Strict')
+		return response
+
+	def get(self, request):
+		return Response({'error': 'GET method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+		
+
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+	def post(self, request, *args, **kwargs):
+		try:
+			refresh_token = request.COOKIES.get('refresh_token')
+			if not refresh_token:
+				return Response({'error': 'No refresh token provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+			refresh = RefreshToken(refresh_token)
+			
+			if 'intra_id' not in refresh:
+				raise InvalidToken('Invalid refresh token')
+			
+			intra_id = CookieManager.get_intra_id_from_cookie(request)
+			if not intra_id or refresh['intra_id'] != intra_id:
+				raise InvalidToken('Token mismatch')
+
+			# Generate new access token
+			access_token = refresh.access_token
+			access_token['intra_id'] = intra_id
+
+			response = Response({
+				'access': str(access_token),
+			})
+			
+			# Optionally rotate the refresh token
+			new_refresh = RefreshToken.for_user(utils.User.get_by_intra_id(intra_id))
+			new_refresh['intra_id'] = intra_id
+			response.set_cookie('refresh_token', str(new_refresh), httponly=True, samesite='Strict')
+
+			return response
+		except (InvalidToken, TokenError) as e:
+			return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+
+	def get(self, request):
+		return Response({'error': 'GET method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+	
+
+class Auth42InfoView(APIView):
+	def get(self, request):
+		return Response({'uid': os.environ.get('42_ID')}, status=status.HTTP_200_OK)
+	def post(self, request):
+		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+	
+
+
+class SendEmailView(APIView):
+	def get(self, request):
+		print("send email", file=sys.stderr)
+		try:
+			code = EmailManager.send_Auth_email("ssddgg99@daum.net")
+			return Response({'code': code}, status=status.HTTP_200_OK)
+		except BadHeaderError:
+			return Response({'error': 'Failed to send email'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+		
+	def post(self, request):
+		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
