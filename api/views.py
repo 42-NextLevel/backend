@@ -60,9 +60,9 @@ class AuthCodeView(APIView):
 			return Response({'registered': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 	def get_42_token(self, code):
-		CLIENT_ID = os.environ.get('42_ID')
-		CLIENT_SECRET = os.environ.get('42_SECRET')
-		REDIRECT_URI = "https://example.com/callback"
+		CLIENT_ID = os.environ.get('FT_ID')
+		CLIENT_SECRET = os.environ.get('FT_SECRET')
+		REDIRECT_URI = "https://localhost:443"
 		TOKEN_URL = "https://api.intra.42.fr/oauth/token"
 		token_data = {
 			"grant_type": "authorization_code",
@@ -206,7 +206,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 
 class Auth42InfoView(APIView):
 	def get(self, request):
-		return Response({'uid': os.environ.get('42_ID')}, status=status.HTTP_200_OK)
+		return Response({'uid': os.environ.get('FT_ID')}, status=status.HTTP_200_OK)
 	
 	def post(self, request):
 

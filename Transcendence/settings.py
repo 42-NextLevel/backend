@@ -195,13 +195,13 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
-SESSION_COOKIE_SECURE = True  # HTTPS를 통해서만 쿠키 전송
-SESSION_COOKIE_HTTPONLY = True  # JavaScript에서 쿠키에 접근 불가
-SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF 공격 방지
+# SESSION_COOKIE_SECURE = True  # HTTPS를 통해서만 쿠키 전송
+# SESSION_COOKIE_HTTPONLY = True  # JavaScript에서 쿠키에 접근 불가
+# SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF 공격 방지
 
 # HTTPS 설정 (프로덕션 환경에서)
 # SECURE_SSL_REDIRECT = True  # HTTP 요청을 HTTPS로 리다이렉트
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # 프록시 서버에서 HTTPS를 통해 요청이 왔을 때
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # 프록시 서버에서 HTTPS를 통해 요청이 왔을 때
 
 ASGI_APPLICATION = 'Transcendence.asgi.application'
 
@@ -215,5 +215,29 @@ CHANNEL_LAYERS = {
 }
 
 
-CORS_ORIGIN_WHITELIST = ['http://127.0.0.1:443' ,'http://localhost:3000']
-CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOW_CREDENTIALS = True
+
+CORS_ORIGIN_ALLOW = [
+	"http://localhost:5500",
+]
+
+# CORS_ALLOW_METHODS = [
+# 	'DELETE',
+# 	'GET',
+# 	'OPTIONS',
+# 	'PATCH',
+# 	'POST',
+# 	'PUT',
+# ]
+
+# CORS_ALLOW_HEADERS = [
+# 	'accept',
+# 	'accept-encoding',
+# 	'content-type',
+# 	'dnt',
+# 	'origin',
+# 	'user-agent',
+
+# 	'x-csrftoken',
+# ]
+
