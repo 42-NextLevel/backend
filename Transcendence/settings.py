@@ -35,6 +35,8 @@ ALLOWED_HOSTS = ["*"]
 # Application definition
 
 INSTALLED_APPS = [
+	'daphne',
+	'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -44,6 +46,7 @@ INSTALLED_APPS = [
 	'api',
 	'rest_framework',
 	'rest_framework_simplejwt',
+	'game',
 ]
 
 MIDDLEWARE = [
@@ -143,9 +146,12 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')  # 발신자 이메일
 EMAIL_HOST_PASSWORD = "izfn bbgt afoh znms"  # 발신자 이메일 비밀번호
 
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': 'redis://username:password@127.0.0.1:6379',
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
     }
 }
 
@@ -195,3 +201,14 @@ SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF 공격 방지
 # HTTPS 설정 (프로덕션 환경에서)
 # SECURE_SSL_REDIRECT = True  # HTTP 요청을 HTTPS로 리다이렉트
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # 프록시 서버에서 HTTPS를 통해 요청이 왔을 때
+
+ASGI_APPLICATION = 'Transcendence.asgi.application'
+
+CHANNEL_LAYERS = {
+	'default': {
+		'BACKEND': 'channels_redis.core.RedisChannelLayer',
+		'CONFIG': {
+			'hosts': [('127.0.0.1', 6379)],
+		},
+	},
+}
