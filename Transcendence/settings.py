@@ -240,3 +240,4 @@ CORS_ORIGIN_ALLOW = [
 
 # 	'x-csrftoken',
 # ]
+
