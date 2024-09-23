@@ -1,11 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.apps import apps
 import requests
 import os
-from django.conf import settings
-from django.core import signing
 from .models import User
 from dotenv import load_dotenv
 from django.core.cache import cache
@@ -17,6 +14,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework import status
 from . import utils
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 load_dotenv()
 
@@ -147,7 +146,7 @@ class AuthTokenView(APIView):
 		intra_id = CookieManager.get_intra_id_from_cookie(request)
 		if not intra_id:
 			return Response(status=status.HTTP_400_BAD_REQUEST)
-		if not EmailManager.varify_auth_code(intra_id, request):
+		if not EmailManager.verify_auth_code(intra_id, request):
 			return Response(status=status.HTTP_400_BAD_REQUEST)
 		user = User.get_by_intra_id(intra_id)
 		if not user:
@@ -175,6 +174,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 				return Response({'error': 'No refresh token provided'}, status=status.HTTP_400_BAD_REQUEST)
 
 			refresh = RefreshToken(refresh_token)
+			cache.set()
 			
 			if 'intra_id' not in refresh:
 				raise InvalidToken('Invalid refresh token')
@@ -207,10 +207,10 @@ class CustomTokenRefreshView(TokenRefreshView):
 class Auth42InfoView(APIView):
 	def get(self, request):
 		return Response({'uid': os.environ.get('42_ID')}, status=status.HTTP_200_OK)
-	def post(self, request):
-		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 	
+	def post(self, request):
 
+		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 class SendEmailView(APIView):
 	def get(self, request):
@@ -224,3 +224,31 @@ class SendEmailView(APIView):
 	def post(self, request):
 		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
+
+class UserProfilesView(APIView):
+	def get(self, request):
+		access_token = request.headers.get('Authorization')
+		if not access_token:
+			return Response({'error': 'No access token provided'}, status=status.HTTP_400_BAD_REQUEST)
+		access_token = JWTAuthentication().get_validated_token(access_token)
+		user = JWTAuthentication().get_user(access_token)
+		if not user:
+			return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+		intra_id = user.intra_id
+		user = User.get_by_intra_id(intra_id)
+		if not user:
+			return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+		return Response({'intra_id': user.intra_id, 'profile_image': user.profile_image}, status=status.HTTP_200_OK)
+
+	def post(self, request):
+		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+	
+
+class LogoutView(APIView):
+	def post(self, request):
+		response = Response(status=status.HTTP_200_OK)
+		response.delete_cookie('refresh_token')
+		return response
+
+	def get(self, request):
+		return Response({'error': 'GET method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
