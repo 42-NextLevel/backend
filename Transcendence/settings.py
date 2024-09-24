@@ -91,7 +91,7 @@ DATABASES = {
         "NAME": os.environ.get("DB_NAME"),
         "USER": os.environ.get("DB_USER"),
         "PASSWORD": os.environ.get("DB_PASS"),
-        "HOST": "localhost",  # Docker 컨테이너 이름
+        "HOST": "pgsql",
         "PORT": "5432", # Postgresql 기본 포트값
     }
 }
@@ -210,7 +210,7 @@ CHANNEL_LAYERS = {
 	'default': {
 		'BACKEND': 'channels_redis.core.RedisChannelLayer',
 		'CONFIG': {
-			'hosts': [('127.0.0.1', 6379)],
+			'hosts': [('redis', 6379)],
 		},
 	},
 }
