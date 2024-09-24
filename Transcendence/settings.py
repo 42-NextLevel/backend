@@ -35,7 +35,8 @@ ALLOWED_HOSTS = ["*"]
 # Application definition
 
 INSTALLED_APPS = [
-	  'channels',
+	'daphne',
+	'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -90,7 +91,7 @@ DATABASES = {
         "NAME": os.environ.get("DB_NAME"),
         "USER": os.environ.get("DB_USER"),
         "PASSWORD": os.environ.get("DB_PASS"),
-        "HOST": "database",
+        "HOST": "localhost",  # Docker 컨테이너 이름
         "PORT": "5432", # Postgresql 기본 포트값
     }
 }
@@ -149,7 +150,7 @@ EMAIL_HOST_PASSWORD = "izfn bbgt afoh znms"  # 발신자 이메일 비밀번호
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://redis:6379/1",
+        "LOCATION": "redis://127.0.0.1:6379/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -241,3 +242,4 @@ CORS_ORIGIN_ALLOW = [
 # 	'x-csrftoken',
 # ]
 
+DEBUG = True
