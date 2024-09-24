@@ -90,7 +90,7 @@ DATABASES = {
         "NAME": os.environ.get("DB_NAME"),
         "USER": os.environ.get("DB_USER"),
         "PASSWORD": os.environ.get("DB_PASS"),
-        "HOST": "postgres",
+        "HOST": "database",
         "PORT": "5432", # Postgresql 기본 포트값
     }
 }
