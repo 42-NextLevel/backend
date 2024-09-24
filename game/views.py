@@ -5,27 +5,33 @@ from django.shortcuts import get_object_or_404
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import uuid
-import redis
+from django.core.cache import cache
 import time
-
-
-game_rooms = redis.StrictRedis(host='localhost', port=6379, db=0)
-
+from django.shortcuts import render
+import sys
 class GameRoomViewSet(viewsets.ViewSet):
 	def list(self, request):
 		"""모든 게임 방 목록을 반환합니다."""
 		game_room_datas = []
-		game_rooms_keys = game_rooms.keys()
-		for room_id in game_rooms_keys:
-			room = game_rooms.get(room_id)
-			game_room_datas.append(
-				{
-					'id': room_id,
-					'name': room['name'],
-					'roomType': room['roomType'],
-					'people': len(room['players']),
-				}
-			)
+		game_rooms_keys = cache.keys('game_room_*')
+		for room_key in game_rooms_keys:
+			room = cache.get(room_key)
+			if room['game_started']:
+				continue
+			if room is None:
+				continue
+			game_room_datas.append({
+				'id': room['id'],
+				'name': room['name'],
+				'roomType': room['roomType'],
+				'people': len(room['players']),
+				'host': room['host'],
+				'created_at': room['created_at']
+			})
+		# 생성된 시간 순으로 정렬
+		game_room_datas.sort(key=lambda x: x['created_at'], reverse=True)
+		
+		
 		return Response(game_room_datas, status=status.HTTP_200_OK)
 
 	def create(self, request):
@@ -36,56 +42,70 @@ class GameRoomViewSet(viewsets.ViewSet):
 			'name': request.data.get('name'),
 			'roomType': request.data.get('roomType'),
 			'players': [{'username': request.data.get('nickname')}],
-			'created_at': time.time(),
-			'expire_at': time.time() + 3600  # 1 hour from creation
+			'host': request.data.get('nickname'),
+			'game_started': False,
+			'created_at': time.time()
 		}
-		game_rooms.set(room_id, room_data)
+		cache.set(f'game_room_{room_id}', room_data, timeout=3600)  # 1 hour timeout
 		return Response(room_data, status=status.HTTP_201_CREATED)
 
 	@action(detail=True, methods=['post'])
 	def join(self, request):
-		"""게임 방에 참가합니다."""
-		room_id = request.data.get('room_id')
+		game_room_id = request.data.get('game_room_id')
 		nickname = request.data.get('nickname')
-		room = game_rooms.get(room_id)
+		print("join called", file=sys.stderr)
+		"""게임 방에 참가합니다."""
+		room = cache.get(f'game_room_{game_room_id}')
+		if not room:
+			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
-		if room.get('roomType') == 0 and len(room['players']) >= 2:
-			return Response({'error': 'Room is full'}, status=status.HTTP_400_BAD_REQUEST)
-
-		if room.get('roomType') == 1 and len(room['players']) >= 4:
+		if (room['roomType'] == 0 and len(room['players']) >= 2) or (room['roomType'] == 1 and len(room['players']) >= 4):
 			return Response({'error': 'Room is full'}, status=status.HTTP_400_BAD_REQUEST)
 
 		if any(player['username'] == nickname for player in room['players']):
-			return Response({'error': 'Nickname already taken'}, status=status.HTTP_400_BAD_REQUEST)
+			return Response({'error': 'You are already in this room'}, status=status.HTTP_400_BAD_REQUEST)
 
-		room['players'].append({'username': nickname, 'ready': False})
-		game_rooms.set(room_id, room)
+		room['players'].append({'username': nickname})
+		cache.set(f'game_room_{game_room_id}', room, timeout=3600)
 
-		return Response()
+		# Notify other players via WebSocket
+		channel_layer = get_channel_layer()
+		async_to_sync(channel_layer.group_send)(
+			f'game_{game_room_id}',
+			{
+				'type': 'room_update',
+				'room': room
+			}
+		)
+
+		return Response(room)
 
 	@action(detail=True, methods=['post'])
 	def leave(self, request, pk=None):
 		"""게임 방에서 나갑니다."""
-		room = get_object_or_404(game_rooms, pk=pk)
+		room = cache.get(f'game_room_{pk}')
+		if not room:
+			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
 		room['players'] = [p for p in room['players'] if p['username'] != request.user.username]
 
 		if not room['players']:
-			del game_rooms[pk]
-			event = "room_closed"
+			cache.delete(f'game_room_{pk}')
+			event = 'room_closed'
 		else:
 			if room['host'] == request.user.username:
 				room['host'] = room['players'][0]['username']
-			event = "player_left"
+			cache.set(f'game_room_{pk}', room, timeout=3600)
+			event = 'player_left'
 
-		# WebSocket 그룹에 플레이어 퇴장 또는 방 폐쇄 알림
+		# Notify other players via WebSocket
 		channel_layer = get_channel_layer()
 		async_to_sync(channel_layer.group_send)(
-			f"room_{pk}",
+			f'game_{pk}',
 			{
-				"type": "room_update",
-				"event": event,
-				"room": room
+				'type': 'room_update',
+				'event': event,
+				'room': room
 			}
 		)
 
@@ -94,7 +114,9 @@ class GameRoomViewSet(viewsets.ViewSet):
 	@action(detail=True, methods=['post'])
 	def ready(self, request, pk=None):
 		"""플레이어의 준비 상태를 변경합니다."""
-		room = get_object_or_404(game_rooms, pk=pk)
+		room = cache.get(f'game_room_{pk}')
+		if not room:
+			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
 		for player in room['players']:
 			if player['username'] == request.user.username:
@@ -103,14 +125,15 @@ class GameRoomViewSet(viewsets.ViewSet):
 		else:
 			return Response({'error': 'Player not in room'}, status=status.HTTP_400_BAD_REQUEST)
 
-		# WebSocket 그룹에 준비 상태 변경 알림
+		cache.set(f'game_room_{pk}', room, timeout=3600)
+
+		# Notify other players via WebSocket
 		channel_layer = get_channel_layer()
 		async_to_sync(channel_layer.group_send)(
-			f"room_{pk}",
+			f'game_{pk}',
 			{
-				"type": "player_ready",
-				"username": request.user.username,
-				"ready": player['ready']
+				'type': 'room_update',
+				'room': room
 			}
 		)
 
@@ -119,7 +142,9 @@ class GameRoomViewSet(viewsets.ViewSet):
 	@action(detail=True, methods=['post'])
 	def start_game(self, request, pk=None):
 		"""게임을 시작합니다."""
-		room = get_object_or_404(game_rooms, pk=pk)
+		room = cache.get(f'game_room_{pk}')
+		if not room:
+			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
 		if request.user.username != room['host']:
 			return Response({'error': 'Only host can start the game'}, status=status.HTTP_403_FORBIDDEN)
@@ -128,15 +153,20 @@ class GameRoomViewSet(viewsets.ViewSet):
 			return Response({'error': 'Not all players are ready'}, status=status.HTTP_400_BAD_REQUEST)
 
 		room['game_started'] = True
+		cache.set(f'game_room_{pk}', room, timeout=3600)
 
-		# WebSocket 그룹에 게임 시작 알림
+		# Notify players via WebSocket
 		channel_layer = get_channel_layer()
 		async_to_sync(channel_layer.group_send)(
-			f"room_{pk}",
+			f'game_{pk}',
 			{
-				"type": "game_start",
-				"room": room
+				'type': 'game_start',
+				'room': room
 			}
 		)
 
 		return Response(room)
+	
+
+def game_room_test(request):
+	return render(request, 'game_room_test.html')
