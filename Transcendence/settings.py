@@ -13,11 +13,13 @@ import platform
 if platform.system() == 'Darwin':
 	REDIS = '127.0.0.1'
 	PSQL = '127.0.0.1'
-	pass
 else:
 	REDIS = 'redis'
 	PSQL = 'pgsql'
-	pass
+
+print(f"Current platform: {platform.system()}")
+print(f"REDIS address: {REDIS}")
+
 from pathlib import Path
 import os
 from dotenv import load_dotenv
@@ -219,7 +221,7 @@ CHANNEL_LAYERS = {
 	'default': {
 		'BACKEND': 'channels_redis.core.RedisChannelLayer',
 		'CONFIG': {
-			'hosts': [('redis', 6379)],
+			'hosts': [(REDIS, 6379)],
 		},
 	},
 }
