@@ -9,11 +9,14 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
+import platform
 if platform.system() == 'Darwin':
 	REDIS = '127.0.0.1'
+	PSQL = '127.0.0.1'
 	pass
 else:
 	REDIS = 'redis'
+	PSQL = 'pgsql'
 	pass
 from pathlib import Path
 import os
@@ -96,7 +99,7 @@ DATABASES = {
         "NAME": os.environ.get("DB_NAME"),
         "USER": os.environ.get("DB_USER"),
         "PASSWORD": os.environ.get("DB_PASS"),
-        "HOST": "pgsql",
+        "HOST": PSQL,
         "PORT": "5432", # Postgresql 기본 포트값
     }
 }
@@ -172,7 +175,7 @@ REST_FRAMEWORK = {
 # JWT 설정
 
 from datetime import timedelta
-import platform
+
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
