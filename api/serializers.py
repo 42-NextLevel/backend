@@ -16,6 +16,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
 	def create(self, validated_data):
 		user = User.create(**validated_data)
 		return user
+	
+	def get_user(self, intra_id):
+		user = User.get(intra_id)
+		return user
 
 class UserEmailUpdateSerializer(serializers.ModelSerializer):
 	class Meta:
