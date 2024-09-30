@@ -14,6 +14,7 @@ import sys
 
 ROOM_TIMEOUT = 3600  # 1 hour
 
+
 class GameRoomViewSet(viewsets.ViewSet):
 	def list(self, request):
 		"""모든 게임 방 목록을 반환합니다."""
@@ -66,6 +67,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 
 		if (room['roomType'] == 0 and len(room['players']) >= 2) or (room['roomType'] == 1 and len(room['players']) >= 4):
 			return Response({'error': 'Room is full'}, status=status.HTTP_400_BAD_REQUEST)
+
 
 		if any(player['nickname'] == nickname for player in room['players']):
 			return Response({'error': 'You are already in this room'}, status=status.HTTP_400_BAD_REQUEST)

@@ -4,6 +4,7 @@ from game.views import game_room_test
 from game.views import socket_api_test
 from game.views import get_client_info
 
+
 urlpatterns = [
     path('list', GameRoomViewSet.as_view({'get': 'list'}), name='room-list'),
     path('new', GameRoomViewSet.as_view({'post': 'create'}), name='room-create'),
