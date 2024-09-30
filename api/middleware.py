@@ -24,7 +24,7 @@ def get_user_jwt(request):
 			user = JWTAuthentication().get_user(validated_token)
 			
 			# intra_id 쿠키와 토큰의 불일치 확인
-			intra_id = utils.get_intra_id_from_cookie(request)
+			intra_id = utils.CookieManager.get_intra_id_from_cookie(request)
 			print(f"Token intra_id: {user.intra_id}, Cookie intra_id: {intra_id}", file=sys.stderr)
 			if not intra_id or intra_id != user.intra_id:
 				raise InvalidToken('Token intra_id mismatch')
