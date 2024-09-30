@@ -33,7 +33,9 @@ class EmailManager:
 		request_code = request.data.get('code')
 		if not cached_code or not request_code:
 			return False
-		return cached_code == request_code
+		if cached_code == request_code:
+			cache.delete(intra_id)
+			return True
 
 
 class CookieManager:
