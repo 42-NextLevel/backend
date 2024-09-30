@@ -9,7 +9,12 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-
+if platform.system() == 'Darwin':
+	REDIS = '127.0.0.1'
+	pass
+else:
+	REDIS = 'redis'
+	pass
 from pathlib import Path
 import os
 from dotenv import load_dotenv
@@ -150,7 +155,7 @@ EMAIL_HOST_PASSWORD = "izfn bbgt afoh znms"  # 발신자 이메일 비밀번호
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": f"redis://{REDIS}:6379/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -167,6 +172,7 @@ REST_FRAMEWORK = {
 # JWT 설정
 
 from datetime import timedelta
+import platform
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
