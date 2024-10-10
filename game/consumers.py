@@ -84,8 +84,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 		)
 
 	async def room_update(self, event):
-		# 이 메서드를 추가합니다
-		room = event['room']
+		room = event['data']
 		await self.send(text_data=json.dumps({
 			'type': 'room_update',
 			'data': room
