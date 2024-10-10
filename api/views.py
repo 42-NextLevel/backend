@@ -194,7 +194,6 @@ class CustomTokenRefreshView(TokenRefreshView):
 				return Response({'error': 'No refresh token provided'}, status=status.HTTP_400_BAD_REQUEST)
 
 			refresh = RefreshToken(refresh_token)
-			cache.set()
 			
 			if 'intra_id' not in refresh:
 				raise InvalidToken('Invalid refresh token')
@@ -210,12 +209,6 @@ class CustomTokenRefreshView(TokenRefreshView):
 			response = Response({
 				'accessToken': str(access_token),
 			})
-			
-			# Optionally rotate the refresh token
-			new_refresh = RefreshToken.for_user(utils.User.get_by_intra_id(intra_id))
-			new_refresh['intra_id'] = intra_id
-			response.set_cookie('refresh_token', str(new_refresh), httponly=True, samesite='Strict')
-
 			return response
 		except (InvalidToken, TokenError) as e:
 			return Response({'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
