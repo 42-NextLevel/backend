@@ -114,18 +114,6 @@ class GameRoomViewSet(viewsets.ViewSet):
 
 		return Response(room)
 
-	@action(detail=True, methods=['get'])
-	def info(self, request):
-		"""게임 방의 정보를 반환합니다."""
-		room_id = request.query_params.get('roomId')
-		if not room_id:
-			return Response({'error': 'Room ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-		room = cache.get(f'game_room_{room_id}')
-		if not room:
-			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
-
-		return Response(room)
-
 def game_room_test(request):
 	return render(request, 'game_room_test.html')
 

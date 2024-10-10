@@ -21,3 +21,13 @@ CREATE DATABASE 'DBNAME' ENCODING 'UTF-8' OWNER dongkseo
 ```sql
 GRANT CONNECT ON DATABASE transcendence TO dongkseo;
 ```
+## Django 
+1. user 더미데이터 삽입
+```bash
+python manage.py insert_dummy_data
+```
+
+2. server 실행
+```bash
+python manage.py runserver
+```

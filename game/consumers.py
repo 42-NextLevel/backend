@@ -91,6 +91,11 @@ class GameConsumer(AsyncWebsocketConsumer):
 			'room': room
 		}))
 
+
+# room -> data
+# gamestart -> game_start
+
+
 	# async def receive(self, text_data):
 	# 	try:
 	# 		data = json.loads(text_data)
