@@ -155,7 +155,7 @@ class AuthTokenView(APIView):
 		refresh = RefreshToken.for_user(user)
 		refresh['intra_id'] = user.intra_id
 		response = Response({
-			'access': str(refresh.access_token),
+			'accessToken': str(refresh.access_token),
 		}, status.HTTP_200_OK)
 		response.set_cookie('refresh_token', str(refresh), httponly=True, samesite='Strict')
 		return response
