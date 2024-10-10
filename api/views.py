@@ -16,7 +16,7 @@ from rest_framework import status
 from . import utils
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-
+from django.conf import settings
 load_dotenv()
 
 import sys
@@ -145,19 +145,40 @@ class AuthTokenView(APIView):
 	def post(self, request):
 		intra_id = CookieManager.get_intra_id_from_cookie(request)
 		if not intra_id:
-			return Response(status=status.HTTP_400_BAD_REQUEST)
+			return Response({"detail": "No intra_id found"}, status=status.HTTP_400_BAD_REQUEST)
+		
 		if not EmailManager.verify_auth_code(intra_id, request):
-			return Response(status=status.HTTP_400_BAD_REQUEST)
+			return Response({"detail": "Invalid auth code"}, status=status.HTTP_400_BAD_REQUEST)
+		
 		user = User.get_by_intra_id(intra_id)
 		if not user:
-			return Response(status=status.HTTP_404_NOT_FOUND)
+			return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 		
 		refresh = RefreshToken.for_user(user)
 		refresh['intra_id'] = user.intra_id
+		
+		# SIMPLE_JWT 설정에 따라 user_id 추가
+		# user_id_claim = getattr(settings, 'SIMPLE_JWT', {}).get('USER_ID_CLAIM', 'user_id')
+		# user_id_field = getattr(settings, 'SIMPLE_JWT', {}).get('USER_ID_FIELD', 'id')
+		# user_id = getattr(user, user_id_field)
+		# refresh[user_id_claim] = user_id
+
+
 		response = Response({
-			'accessToken': str(refresh.access_token),
-		}, status.HTTP_200_OK)
-		response.set_cookie('refresh_token', str(refresh), httponly=True, samesite='Strict')
+			'access': str(refresh.access_token),
+			# 'refresh': str(refresh),
+		}, status=status.HTTP_200_OK)
+
+		# HttpOnly 쿠키로 refresh 토큰 설정
+		response.set_cookie(
+			'refresh_token', 
+			str(refresh), 
+			httponly=True, 
+			samesite='Strict',
+			secure=request.is_secure(),  # HTTPS를 사용하는 경우에만 True
+			max_age=settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()
+		)
+
 		return response
 
 	def get(self, request):
@@ -188,7 +209,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 			access_token['intra_id'] = intra_id
 
 			response = Response({
-				'access': str(access_token),
+				'accessToken': str(access_token),
 			})
 			
 			# Optionally rotate the refresh token

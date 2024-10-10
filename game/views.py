@@ -11,12 +11,15 @@ from api.utils import CookieManager
 from api.serializers import UserCreateSerializer
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import sys
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+
 
 ROOM_TIMEOUT = 3600  # 1 hour
 
 
 class GameRoomViewSet(viewsets.ViewSet):
 	def list(self, request):
+		print("list", sys.stderr)
 		"""모든 게임 방 목록을 반환합니다."""
 		game_room_datas = []
 		game_rooms_keys = cache.keys('game_room_*')

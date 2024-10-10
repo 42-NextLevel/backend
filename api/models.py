@@ -6,7 +6,9 @@ class User(models.Model):
 	intra_id = models.CharField(max_length=100, unique=True)
 	profile_image = models.CharField(max_length=255)
 	email = models.CharField(max_length=255, null=True)
-
+	
+	USERNAME_FIELD = 'intra_id'
+	REQUIRED_FIELDS = ['profile_image']
 
 	def __str__(self):
 		return self.intra_id
@@ -33,6 +35,7 @@ class User(models.Model):
 			return cls.objects.get(intra_id=intra_id)
 		except cls.DoesNotExist:
 			return None
+		
 	
 	class Meta:
 		db_table = 'users'
