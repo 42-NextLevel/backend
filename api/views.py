@@ -165,8 +165,7 @@ class AuthTokenView(APIView):
 
 
 		response = Response({
-			'access': str(refresh.access_token),
-			# 'refresh': str(refresh),
+			'accessToken': str(refresh.access_token),
 		}, status=status.HTTP_200_OK)
 
 		# HttpOnly 쿠키로 refresh 토큰 설정
