@@ -48,7 +48,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		}
 		cache.set(f'game_room_{room_id}', room_data, timeout=ROOM_TIMEOUT)
 		response = Response(status=status.HTTP_201_CREATED)
-		CookieManager.set_intra_id_cookie(response, 'dongkseo')
+		# CookieManager.set_intra_id_cookie(response, 'dongkseo')
 		CookieManager.set_nickname_cookie(response, request.data.get('nickname'))
 		
 		return response
