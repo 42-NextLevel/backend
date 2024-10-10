@@ -82,7 +82,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			f'game_{game_room_id}',
 			{
 				'type': 'room_update',
-				'room': room
+				'data': room
 			}
 		)
 		return Response(room)
@@ -108,7 +108,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			f'game_{pk}',
 			{
 				'type': 'game_start',
-				'room': room
+				'data': room
 			}
 		)
 

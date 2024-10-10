@@ -79,7 +79,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 			self.room_group_name,
 			{
 				'type': 'room_update',
-				'room': room
+				'data': room
 			}
 		)
 
@@ -88,7 +88,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 		room = event['room']
 		await self.send(text_data=json.dumps({
 			'type': 'room_update',
-			'room': room
+			'data': room
 		}))
 
 
