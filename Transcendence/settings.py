@@ -66,8 +66,8 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'api.middleware.JWTAuthenticationMiddleware',  # <- 위치 변경
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # 'api.middleware.JWTAuthenticationMiddleware',  # <- 위치 변경
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -168,12 +168,16 @@ CACHES = {
 }
 
 
+AUTHENTICATION_BACKENDS = [
+    'api.auth.IntraAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 REST_FRAMEWORK = {
-
-	'DEFAULT_AUTHENTICATION_CLASSES': [
-	],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'api.authentication.CustomJWTAuthentication',
+    ],
 }
-
 # JWT 설정
 
 from datetime import timedelta

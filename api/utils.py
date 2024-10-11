@@ -59,3 +59,10 @@ class CookieManager:
 	def set_nickname_cookie(response: Response, nickname):
 		response.set_cookie('nickname', nickname, httponly=True, samesite='Strict', secure=True)
 		return response
+	
+	@staticmethod
+	def delete_cookie(response: Response):
+		response.delete_cookie('intra_id')
+		response.delete_cookie('nickname')
+		response.delete_cookie('refresh_token')
+		return response

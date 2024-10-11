@@ -9,15 +9,17 @@ import time
 from django.shortcuts import render
 from api.utils import CookieManager
 from api.serializers import UserCreateSerializer
-from rest_framework_simplejwt.authentication import JWTAuthentication
 import sys
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 ROOM_TIMEOUT = 3600  # 1 hour
 
 
 class GameRoomViewSet(viewsets.ViewSet):
+	authentication_classes = [JWTAuthentication]
+	
+
 	def list(self, request):
 		print("list", sys.stderr)
 		"""모든 게임 방 목록을 반환합니다."""
