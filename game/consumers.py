@@ -55,7 +55,10 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 	@database_sync_to_async
 	def set_room(self, room: Dict[str, Any]):
-		cache.set(f'game_room_{self.room_id}', room, timeout=ROOM_TIMEOUT)
+		if room['host'] is None:
+			cache.delete(f'game_room_{self.room_id}')
+		else:
+			cache.set(f'game_room_{self.room_id}', room, timeout=ROOM_TIMEOUT)
 
 	async def update_room_players(self, add: bool):
 		print(f"Updating room players: {add}", file=sys.stderr)
@@ -69,6 +72,14 @@ class GameConsumer(AsyncWebsocketConsumer):
 				players.append(self.user_data)
 		else:
 			players = [p for p in players if p['nickname'] != self.user_data['nickname']]
+			# change host if host leaves
+			if room['host'] == self.user_data['nickname']:
+				if players:
+					room['host'] = players[0]['nickname']
+				else:
+					room['host'] = None
+
+					
 
 		room['players'] = players
 		await self.set_room(room)

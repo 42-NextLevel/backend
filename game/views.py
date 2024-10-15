@@ -75,7 +75,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 
 
 		if any(player['nickname'] == nickname for player in room['players']):
-			return Response({'error': 'You are already in this room'}, status=status.HTTP_400_BAD_REQUEST)
+			return Response({'error': 'Nickname already exists'}, status=status.HTTP_400_BAD_REQUEST)
 		
 		intra_id = CookieManager.get_intra_id_from_cookie(request)
 		user = UserCreateSerializer().get_user(intra_id)
@@ -101,9 +101,6 @@ class GameRoomViewSet(viewsets.ViewSet):
 
 		if request.user.username != room['host']:
 			return Response({'error': 'Only host can start the game'}, status=status.HTTP_403_FORBIDDEN)
-
-		if not all(player.get('ready') for player in room['players']):
-			return Response({'error': 'Not all players are ready'}, status=status.HTTP_400_BAD_REQUEST)
 
 		room['game_started'] = True
 		cache.set(f'game_room_{pk}', room, timeout=ROOM_TIMEOUT)
