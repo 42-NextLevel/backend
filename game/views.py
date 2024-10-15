@@ -10,14 +10,12 @@ from django.shortcuts import render
 from api.utils import CookieManager
 from api.serializers import UserCreateSerializer
 import sys
-from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 ROOM_TIMEOUT = 3600  # 1 hour
 
 
 class GameRoomViewSet(viewsets.ViewSet):
-	authentication_classes = [JWTAuthentication]
 	
 
 	def list(self, request):
