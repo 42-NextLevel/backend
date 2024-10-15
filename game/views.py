@@ -8,7 +8,7 @@ from django.core.cache import cache
 import time
 from django.shortcuts import render
 from api.utils import CookieManager
-from api.serializers import UserCreateSerializer
+from api.models import User
 import sys
 
 
@@ -80,7 +80,9 @@ class GameRoomViewSet(viewsets.ViewSet):
 			return Response({'error': 'Nickname already exists'}, status=status.HTTP_400_BAD_REQUEST)
 		
 		intra_id = CookieManager.get_intra_id_from_cookie(request)
-		user = UserCreateSerializer().get_user(intra_id)
+		user = User.get_by_intra_id(intra_id)
+
+		print("user", user, sys.stderr)
 		room['players'].append({'nickname': nickname, 'profile_image': user.profile_image})
 		cache.set(f'game_room_{game_room_id}', room, timeout=ROOM_TIMEOUT)
 
