@@ -4,10 +4,11 @@ from django.core.cache import cache
 from channels.db import database_sync_to_async
 import sys
 from typing import Dict, Any
-from api.serializers import UserCreateSerializer
+from api.models import User
 from urllib.parse import parse_qs
-
+import time
 ROOM_TIMEOUT = 3600  # 1 hour
+import asyncio
 
 class GameConsumer(AsyncWebsocketConsumer):
 	async def connect(self):
@@ -28,8 +29,8 @@ class GameConsumer(AsyncWebsocketConsumer):
 			return
 
 		try:
-			user = await self.get_user(intra_id)
-			self.user_data = {'nickname': nickname, 'profile_image': user.profile_image}
+			user : User = await self.get_user(intra_id)
+			self.user_data = {'intraId': intra_id, 'nickname': nickname, 'profileImage': user.profile_image}
 		except Exception as e:
 			print(f"Error getting user data: {e}", file=sys.stderr)
 			await self.close()
@@ -47,7 +48,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 	@database_sync_to_async
 	def get_user(self, intra_id: str):
-		return UserCreateSerializer().get_user(intra_id)
+		return User.get_by_intra_id(intra_id)
 
 	@database_sync_to_async
 	def get_room(self) -> Dict[str, Any]:
@@ -68,14 +69,14 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 		players = room.get('players', [])
 		if add:
-			if self.user_data['nickname'] not in [p['nickname'] for p in players]:
+			if self.user_data['intraId'] not in [p['intraId'] for p in players]:
 				players.append(self.user_data)
 		else:
-			players = [p for p in players if p['nickname'] != self.user_data['nickname']]
+			players = [p for p in players if p['intraId'] != self.user_data['intraId']]
 			# change host if host leaves
-			if room['host'] == self.user_data['nickname']:
+			if room['host'] == self.user_data['intraId']:
 				if players:
-					room['host'] = players[0]['nickname']
+					room['host'] = players[0]['intraId']
 				else:
 					room['host'] = None
 
@@ -101,23 +102,3 @@ class GameConsumer(AsyncWebsocketConsumer):
 			'data': room
 		}))
 
-
-# room -> data
-# gamestart -> game_start
-
-
-	# async def receive(self, text_data):
-	# 	try:
-	# 		data = json.loads(text_data)
-	# 		message_type = data.get('type')
-
-	# 		if message_type == 'chat_message':
-	# 			await self.handle_chat_message(data)
-	# 		elif message_type == 'game_action':
-	# 			await self.handle_game_action(data)
-	# 		else:
-	# 			print(f"Received unknown message type: {message_type}", file=sys.stderr)
-	# 	except json.JSONDecodeError:
-	# 		print(f"Received invalid JSON: {text_data}", file=sys.stderr)
-	# 	except Exception as e:
-	# 		print(f"Error processing message: {e}", file=sys.stderr)
