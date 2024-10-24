@@ -128,6 +128,13 @@ class GameConsumer(AsyncWebsocketConsumer):
 			'data': room
 		}))
 
+	async def game_start(self, event):
+		await self.send(text_data=json.dumps({
+			'type': 'game_start',
+			'data': event['data']
+		}))
+
+
 
 
 

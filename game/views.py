@@ -109,10 +109,12 @@ class GameRoomViewSet(viewsets.ViewSet):
 		if not room:
 			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
-		intra_id = CookieManager.get_intra_id_from_cookie(request)
+		# intra_id = CookieManager.get_intra_id_from_cookie(request)
 
-		if intra_id != room['host']:
-			return Response({'error': 'Only host can start the game'}, status=status.HTTP_403_FORBIDDEN)
+		# host = room['host']
+		
+		# if intra_id != room['host']:
+		# 	return Response({'error': 'Only host can start the game'}, status=status.HTTP_403_FORBIDDEN)
 		
 
 		# 인원수 체크
