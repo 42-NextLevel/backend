@@ -83,7 +83,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		user = User.get_by_intra_id(intra_id)
 
 		print("user", user, sys.stderr)
-		room['players'].append({'nickname': nickname, 'profile_image': user.profile_image})
+		room['players'].append({'intraId':intra_id, 'nickname': nickname, 'profileImage': user.profile_image})
 		cache.set(f'game_room_{game_room_id}', room, timeout=ROOM_TIMEOUT)
 
 		channel_layer = get_channel_layer()
@@ -103,8 +103,15 @@ class GameRoomViewSet(viewsets.ViewSet):
 		if not room:
 			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
-		if request.user.username != room['host']:
+		intra_id = CookieManager.get_intra_id_from_cookie(request)
+
+		if intra_id != room['host']:
 			return Response({'error': 'Only host can start the game'}, status=status.HTTP_403_FORBIDDEN)
+		
+
+		# 인원수 체크
+		if (room['roomType'] == 0 and len(room['players']) != 2) or (room['roomType'] == 1 and len(room['players']) != 4):
+			return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
 
 		room['game_started'] = True
 		cache.set(f'game_room_{pk}', room, timeout=ROOM_TIMEOUT)
@@ -117,8 +124,6 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'data': room
 			}
 		)
-
-		return Response(room)
 
 def game_room_test(request):
 	return render(request, 'game_room_test.html')
