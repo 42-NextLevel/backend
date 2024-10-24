@@ -12,6 +12,16 @@ import asyncio
 
 class GameConsumer(AsyncWebsocketConsumer):
 	async def connect(self):
+		try :
+			room = await self.get_room()
+			if not room:
+				await self.close()
+				return
+		except Exception as e:
+			print(f"Error getting room: {e}", file=sys.stderr)
+			await self.close()
+			return
+
 		self.room_id = self.scope['url_route']['kwargs']['room_id']
 		self.room_group_name = f'game_{self.room_id}'
 		print("Cookies: ", self.scope['cookies'], file=sys.stderr)
