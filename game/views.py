@@ -102,9 +102,10 @@ class GameRoomViewSet(viewsets.ViewSet):
 		return response
 
 	@action(detail=True, methods=['post'])
-	def start_game(self, request, pk=None):
+	def start_game(self, request):
+		roomId = request.data.get('roomId')
 		"""게임을 시작합니다."""
-		room = cache.get(f'game_room_{pk}')
+		room = cache.get(f'game_room_{roomId}')
 		if not room:
 			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -119,11 +120,11 @@ class GameRoomViewSet(viewsets.ViewSet):
 			return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
 
 		room['game_started'] = True
-		cache.set(f'game_room_{pk}', room, timeout=ROOM_TIMEOUT)
+		cache.set(f'game_room_{roomId}', room, timeout=ROOM_TIMEOUT)
 
 		channel_layer = get_channel_layer()
 		async_to_sync(channel_layer.group_send)(
-			f'game_{pk}',
+			f'game_{roomId}',
 			{
 				'type': 'game_start',
 				'data': room
