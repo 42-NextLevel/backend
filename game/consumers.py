@@ -12,6 +12,13 @@ import asyncio
 
 class GameConsumer(AsyncWebsocketConsumer):
 	async def connect(self):
+		
+
+		self.room_id = self.scope['url_route']['kwargs']['room_id']
+		self.room_group_name = f'game_{self.room_id}'
+		print("Cookies: ", self.scope['cookies'], file=sys.stderr)
+		query_string = self.scope['query_string'].decode()
+		query_params = parse_qs(query_string)
 		try :
 			room = await self.get_room()
 			if not room:
@@ -84,6 +91,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 		players = room.get('players', [])
 		if not add and len(players) == 0:
+			cache.delete(f'game_room_{self.room_id}')
 			return
 		if add:
 			if self.user_data['intraId'] not in [p['intraId'] for p in players]:
