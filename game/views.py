@@ -60,6 +60,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 
 	@action(detail=True, methods=['post'])
 	def join(self, request):
+		response = Response()
 		"""게임 방에 참가합니다."""
 		game_room_id = request.data.get('roomId')
 		print("game_room_id", game_room_id, sys.stderr)
@@ -83,6 +84,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		user = User.get_by_intra_id(intra_id)
 
 		print("user", user, sys.stderr)
+		CookieManager.set_nickname_cookie(response, request.data.get('nickname'))
 		room['players'].append({'intraId':intra_id, 'nickname': nickname, 'profileImage': user.profile_image})
 		cache.set(f'game_room_{game_room_id}', room, timeout=ROOM_TIMEOUT)
 
@@ -94,7 +96,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'data': room
 			}
 		)
-		return Response(room)
+		return response(room)
 
 	@action(detail=True, methods=['post'])
 	def start_game(self, request, pk=None):
