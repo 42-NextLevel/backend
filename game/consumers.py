@@ -44,6 +44,11 @@ class GameConsumer(AsyncWebsocketConsumer):
 	async def disconnect(self, close_code):
 		if hasattr(self, 'user_data'):
 			await self.update_room_players(add=False)
+		# if room is empty, delete it
+		room = await self.get_room()
+		if room and not room.get('players', []):
+			print("Deleting room", file=sys.stderr)
+			cache.delete(f'game_room_{self.room_id}')
 		await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
 	@database_sync_to_async
@@ -113,37 +118,13 @@ import json
 import time
 import random
 import logging
-import asyncio
+import math
 import sys
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.cache import cache
 from asgiref.sync import sync_to_async
-import math
 
 logger = logging.getLogger(__name__)
-
-class GamePysics:
-# 물리 상수
-    WALL_X = 5.0
-    WALL_BOUNCE_FACTOR = 0.98
-    PADDLE_WIDTH = 2.0
-    PADDLE_DEPTH = 0.5
-    PADDLE_Z = 7.0
-    SCORE_Z = 7.5
-    
-    # 속도 제한
-    MIN_VELOCITY = 3.0
-    MAX_VELOCITY = 15.0
-    
-    # 게임 설정
-    INITIAL_BALL_SPEED = 8.0
-    MIN_ANGLE = math.pi/6  # 30도
-    MAX_ANGLE = math.pi/3  # 60도
-    
-    # 충돌 설정
-    EDGE_THRESHOLD = 0.1
-    EDGE_BOUNCE_FACTOR = 0.8
-    EDGE_HIT_MULTIPLIER = 1.2
 
 class GameState:
 	active_games = {}
@@ -239,7 +220,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	async def receive(self, text_data):
 		try:
 			data = json.loads(text_data)
-			print(f"Received data: {data}", file=sys.stderr)
 			
 			if data['type'] == 'client_state_update':
 				await self.handle_client_update(data)
@@ -277,121 +257,148 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			
 			await asyncio.sleep(0.001)
 
+	async def check_collisions(self):
+		ball = self.game_state['ball']
+		PADDLE_WIDTH = 2
+		PADDLE_DEPTH = 0.5
+		PADDLE_HEIGHT = 1
+		BALL_RADIUS = 0.25
+
+		for player_id, player in self.game_state['players'].items():
+			z_pos = 7 if player_id == 'player1' else -7
+			
+			# 패들의 바운딩 박스 정의
+			paddle_bounds = {
+				'min_x': player['position']['x'] - PADDLE_WIDTH/2,
+				'max_x': player['position']['x'] + PADDLE_WIDTH/2,
+				'min_z': z_pos - PADDLE_DEPTH/2,
+				'max_z': z_pos + PADDLE_DEPTH/2,
+				'min_y': 0,
+				'max_y': PADDLE_HEIGHT
+			}
+
+			# AABB 충돌 검사
+			if (ball['position']['x'] + BALL_RADIUS > paddle_bounds['min_x'] and
+				ball['position']['x'] - BALL_RADIUS < paddle_bounds['max_x'] and
+				ball['position']['z'] + BALL_RADIUS > paddle_bounds['min_z'] and
+				ball['position']['z'] - BALL_RADIUS < paddle_bounds['max_z']):
+
+				# 충돌 위치는 항상 계산
+				hit_position = (ball['position']['x'] - player['position']['x']) / (PADDLE_WIDTH/2)
+
+				# 충돌이 감지되면 충돌 방향 결정
+				penetration_x = min(
+					abs(ball['position']['x'] - paddle_bounds['min_x']),
+					abs(ball['position']['x'] - paddle_bounds['max_x'])
+				)
+				penetration_z = min(
+					abs(ball['position']['z'] - paddle_bounds['min_z']),
+					abs(ball['position']['z'] - paddle_bounds['max_z'])
+				)
+
+				current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
+
+				# 충돌 위치에 따른 반사 처리
+				if penetration_x < penetration_z:
+					# 패들의 측면과 충돌
+					ball['velocity']['x'] *= -1
+				else:
+					# 패들의 전면/후면과 충돌
+					ball['velocity']['z'] *= -1
+					
+					# 비선형적인 반사각 계산
+					angle_factor = math.pow(abs(hit_position), 1.5) * math.copysign(1, hit_position)
+					
+					# 속도 성분 재계산
+					ball['velocity']['x'] = current_speed * angle_factor * 0.5
+					ball['velocity']['z'] = math.copysign(
+						current_speed * math.sqrt(1 - (angle_factor * 0.5)**2),
+						ball['velocity']['z']
+					)
+
+				# 최소/최대 속도 제한
+				MAX_SPEED = 15
+				MIN_SPEED = 5
+				current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
+				
+				if current_speed > MAX_SPEED:
+					speed_scale = MAX_SPEED / current_speed
+					ball['velocity']['x'] *= speed_scale
+					ball['velocity']['z'] *= speed_scale
+				elif current_speed < MIN_SPEED:
+					speed_scale = MIN_SPEED / current_speed
+					ball['velocity']['x'] *= speed_scale
+					ball['velocity']['z'] *= speed_scale
+
+				print(f"{player_id} hit! Position: {hit_position:.2f}, Speed: {current_speed:.2f}", 
+					file=sys.stderr)
+
 	async def update_game_state(self):
 		current_time = time.time()
-		delta_time = min(current_time - self.last_update_time, 0.032)  # 최대 32ms로 제한
+		delta_time = current_time - self.last_update_time
 		self.last_update_time = current_time
 		
 		ball = self.game_state['ball']
 		
-		# 이전 위치 저장 (충돌 후 위치 보정에 사용)
-		prev_x = ball['position']['x']
-		prev_z = ball['position']['z']
-		
-		# 새 위치 계산
-		new_x = ball['position']['x'] + ball['velocity']['x'] * delta_time
-		new_z = ball['position']['z'] + ball['velocity']['z'] * delta_time
-		
-		# 벽 충돌 처리 (부드러운 반사)
-
-		
-		
-		if abs(new_x) > GamePysics.WALL_X:
-			# 정확한 충돌 지점으로 되돌리기
-			penetration = abs(new_x) - GamePysics.WALL_X
-			ball['position']['x'] = (GamePysics.WALL_X if new_x > 0 else - GamePysics.WALL_X) - (penetration * 0.1)
-			ball['velocity']['x'] *= -GamePysics.WALL_BOUNCE_FACTOR
+		# 득점 애니메이션 중인지 확인
+		if hasattr(self, 'score_animation') and self.score_animation['active']:
+			if current_time - self.score_animation['start_time'] >= 1.5:  # 1.5초 후 리셋
+				self.score_animation['active'] = False
+				self.reset_ball()
+			else:
+				# 득점 애니메이션 중에는 공이 멈춤
+				return
 		else:
-			ball['position']['x'] = new_x
-			
-		ball['position']['z'] = new_z
-		
-		# 패들 충돌 처리
-		await self.check_paddle_collisions(prev_x, prev_z)
-		
-		# 득점 판정
-		
-		if abs(ball['position']['z']) > GamePysics.SCORE_Z:
-			scoring_player = 'player1' if ball['position']['z'] > 0 else 'player2'
-			self.game_state['score'][scoring_player] += 1
-			print(f"Score! {scoring_player}", file=sys.stderr)
-			self.reset_ball()
-		
+			# 일반 게임 플레이
+			ball['position']['x'] += ball['velocity']['x'] * delta_time
+			ball['position']['z'] += ball['velocity']['z'] * delta_time
+			await self.check_collisions()
+
+			# 벽 충돌 처리
+			if abs(ball['position']['x']) > 5:
+				ball['position']['x'] = math.copysign(5, ball['position']['x'])
+				ball['velocity']['x'] *= -1
+
+			# 득점 처리
+			if abs(ball['position']['z']) > 7:
+				scoring_player = 'player1' if ball['position']['z'] > 0 else 'player2'
+				
+				# 득점 처리 시작
+				if not hasattr(self, 'score_animation'):
+					self.score_animation = {'active': False, 'start_time': 0}
+				
+				if not self.score_animation['active']:
+					self.game_state['score'][scoring_player] += 1
+					print(f"Score! {scoring_player}", file=sys.stderr)
+					
+					# 공의 속도를 조정하여 더 멀리 날아가게 함
+					ball['velocity']['z'] *= 1.5  # 공이 더 멀리 날아가도록 속도 증가
+					self.score_animation = {
+						'active': True,
+						'start_time': current_time
+					}
+
 		await self.broadcast_partial_state()
 
-	async def check_paddle_collisions(self, prev_x, prev_z):
-		ball = self.game_state['ball']
-		
-		
-		
-		for player_id, player in self.game_state['players'].items():
-			paddle_z = GamePysics.PADDLE_Z if player_id == 'player1' else -GamePysics.PADDLE_Z
-			paddle_x = player['position']['x']
-			
-			# 패들과의 거리 계산
-			dx = ball['position']['x'] - paddle_x
-			dz = ball['position']['z'] - paddle_z
-			
-			# 패들 충돌 영역 확인
-			if (abs(dz) < GamePysics.PADDLE_DEPTH and 
-				abs(dx) < GamePysics.PADDLE_WIDTH/2):
-				
-				# 모서리 충돌 확인
-				edge_hit = abs(dx) > (GamePysics.PADDLE_WIDTH/2 - 0.1)
-				
-				# 이전 위치를 기반으로 더 정확한 충돌 방향 결정
-				from_front = (prev_z - paddle_z) * ball['velocity']['z'] < 0
-				
-				if edge_hit and not from_front:
-					# 모서리 충돌: 더 극적인 반사각
-					hit_factor = 1.2 if dx > 0 else -1.2
-					ball['velocity']['x'] = abs(ball['velocity']['z']) * hit_factor
-					ball['velocity']['z'] *= -0.8
-				else:
-					# 일반 충돌
-					# 히트 포인트에 따른 반사각 계산 (-1.0 to 1.0)
-					hit_position = dx / (GamePysics.PADDLE_WIDTH/2)
-					
-					# 기본 반사
-					ball['velocity']['z'] *= -1.0
-					
-					# X 속도 조정 (히트 포인트에 따라)
-					velocity_adjustment = hit_position * 8.0
-					new_x_velocity = ball['velocity']['x'] + velocity_adjustment
-					
-					# 전체 속도 벡터 정규화
-					total_velocity = (new_x_velocity ** 2 + ball['velocity']['z'] ** 2) ** 0.5
-					if total_velocity > GamePysics.MAX_VELOCITY:
-						scale = GamePysics.MAX_VELOCITY / total_velocity
-						new_x_velocity *= scale
-						ball['velocity']['z'] *= scale
-					elif total_velocity < GamePysics.MIN_VELOCITY:
-						scale = GamePysics.MIN_VELOCITY / total_velocity
-						new_x_velocity *= scale
-						ball['velocity']['z'] *= scale
-					
-					ball['velocity']['x'] = new_x_velocity
-				
-				# 충돌 후 위치 보정 (패들 뚫림 방지)
-				if from_front:
-					ball['position']['z'] = paddle_z + (GamePysics.PADDLE_DEPTH * 1.1 * (-1 if ball['velocity']['z'] < 0 else 1))
-				
-				print(f"{player_id} hit! Position: {hit_position:.2f} Edge: {edge_hit}", file=sys.stderr)
-				return
-
 	def reset_ball(self):
-		"""공을 중앙으로 리셋하고 랜덤한 방향으로 발사"""
-		self.game_state['ball']['position'] = {'x': 0, 'y': 0.2, 'z': 0}
+		# 초기 속도를 약간 랜덤하게 설정
+		initial_speed = 7  # 기본 속도
+		angle = random.uniform(-math.pi/4, math.pi/4)  # -45도에서 45도 사이의 각도
 		
-		# 랜덤한 각도로 발사 (너무 수직이나 수평에 가깝지 않게)
-		angle = random.uniform(math.pi/6, math.pi/3)  # 30-60도
-		direction = random.choice([-1, 1])  # 랜덤한 방향
-		speed = 8.0
+		vx = initial_speed * math.sin(angle)
+		vz = initial_speed * math.cos(angle)
 		
-		self.game_state['ball']['velocity'] = {
-			'x': math.cos(angle) * speed,
-			'y': 0,
-			'z': math.sin(angle) * speed * direction
+		# 무작위로 방향 선택
+		if random.random() < 0.5:
+			vz *= -1
+		
+		self.game_state['ball'] = {
+			'position': {'x': 0, 'y': 0.2, 'z': 0},
+			'velocity': {
+				'x': vx,
+				'y': 0,
+				'z': vz
+			}
 		}
 
 	async def handle_client_update(self, data):
@@ -406,7 +413,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 			self.game_state['players'][player]['position'] = position
 			self.game_state['lastProcessedInput'][player] = input_sequence
-			print("self_game_state: ", self.game_state, file=sys.stderr)
 
 			await self.channel_layer.group_send(
 				self.game_group_name,
