@@ -68,6 +68,8 @@ class GameConsumer(AsyncWebsocketConsumer):
 			return
 
 		players = room.get('players', [])
+		if not add and len(players) == 0:
+			return
 		if add:
 			if self.user_data['intraId'] not in [p['intraId'] for p in players]:
 				players.append(self.user_data)
@@ -79,6 +81,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 					room['host'] = players[0]['intraId']
 				else:
 					room['host'] = None
+					cache.delete(f'game_room_{self.room_id}')
 
 					
 
