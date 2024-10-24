@@ -94,8 +94,17 @@ class GameConsumer(AsyncWebsocketConsumer):
 			cache.delete(f'game_room_{self.room_id}')
 			return
 		if add:
+			# 토너먼트 방식이라서 2명씩 묶어서 게임 시작
+
+
 			if self.user_data['intraId'] not in [p['intraId'] for p in players]:
 				players.append(self.user_data)
+
+			if len(players) == 4:
+				game1 = [players[0], players[1]]
+				game2 = [players[2], players[3]]
+				room['game1'] = game1
+				room['game2'] = game2
 		else:
 			players = [p for p in players if p['intraId'] != self.user_data['intraId']]
 			# change host if host leaves
@@ -229,6 +238,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		return None
 
 	async def disconnect(self, close_code):
+		# 남은 플레이어에게 승리 메시지 전송
 		if self.backup_task:
 			self.backup_task.cancel()
 			
@@ -509,3 +519,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			except Exception as e:
 				logger.error(f"Error in periodic backup: {e}")
 				await asyncio.sleep(60)
+
+
+
+# DB 게임시작할때 초기 데이터 넣고
+# 3점 게임 방식
+# 관전 방식 
+# 

@@ -134,6 +134,44 @@ class GameRoomViewSet(viewsets.ViewSet):
 		)
 
 		return Response(status=status.HTTP_200_OK)
+	
+	def players_info(self, request):
+		response = {}
+		roomId = request.data.get('roomId')
+		room = cache.get(f'game_room_{roomId}')
+		if not room:
+			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+		roomType = room['roomType']
+		if roomType == 0:
+			response = {
+				'matchType': 0,
+				'players': room['players']
+			}
+		elif roomType == 1:
+			intra_id = CookieManager.get_intra_id_from_cookie(request)
+			game1 = room['game1']
+			game2 = room['game2']
+			for player in game1:
+				if player['intraId'] == intra_id:
+					response = {
+						'matchType': 1,
+						'players': game1
+					}
+					return Response(response, status=status.HTTP_200_OK)
+
+			for player in game2:
+				if player['intraId'] == intra_id:
+					response = {
+						'matchType': 2,
+						'players': game2
+					}
+					break
+		return Response(response, status=status.HTTP_200_OK)
+				
+
+		
+
+		return Response(room['players'], status=status.HTTP_200_OK)
 
 def game_room_test(request):
 	return render(request, 'game_room_test.html')
