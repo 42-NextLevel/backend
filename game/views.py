@@ -133,6 +133,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 			}
 		)
 
+		return Response(status=status.HTTP_200_OK)
+
 def game_room_test(request):
 	return render(request, 'game_room_test.html')
 
