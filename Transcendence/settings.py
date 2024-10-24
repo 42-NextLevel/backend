@@ -234,12 +234,20 @@ CHANNEL_LAYERS = {
 	},
 }
 
+ALLOWED_HOSTS = ["*"]  # 개발 환경에서만 사용
+
+
 
 # CORS_ALLOW_CREDENTIALS = True
 
-CORS_ORIGIN_ALLOW = [
+CORS_ALLOWED_ORIGINS = [
 	"http://localhost:5500",
+	
 ]
+
+CORS_ALLOW_CREDENTIALS = True
+
+
 
 # CORS_ALLOW_METHODS = [
 # 	'DELETE',
