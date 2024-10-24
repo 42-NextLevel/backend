@@ -10,7 +10,6 @@ urlpatterns = [
     path('new', GameRoomViewSet.as_view({'post': 'create'}), name='room-create'),
     path('join', GameRoomViewSet.as_view({'post': 'join'}), name='room-join'),
     path('start', GameRoomViewSet.as_view({'post': 'start_game'}), name='room-start'),
-	path('game-room-test/', game_room_test, name='game_room_test'),
-	path('socket_api_test/', socket_api_test, name='socket_api_test'),
+	path('players', GameRoomViewSet.as_view({'post': 'players_info'}), name='room-players'),
 	path('user-info/', get_client_info, name='get_client_info'),
 ]

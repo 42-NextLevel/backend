@@ -6,7 +6,7 @@ from asgiref.sync import async_to_sync
 import uuid
 from django.core.cache import cache
 import time
-from django.shortcuts import render
+from django.http import JsonResponse
 from api.utils import CookieManager
 from api.models import User
 import sys
@@ -47,7 +47,9 @@ class GameRoomViewSet(viewsets.ViewSet):
 			'players': [],
 			'host': request.data.get('nickname'),
 			'game_started': False,
-			'created_at': time.time()
+			'created_at': time.time(),
+			'game1': [],
+			'game2': []
 		}
 		print("Room id:", room_id, sys.stderr)
 		cache.set(f'game_room_{room_id}', room_data, timeout=ROOM_TIMEOUT)
@@ -136,27 +138,39 @@ class GameRoomViewSet(viewsets.ViewSet):
 		return Response(status=status.HTTP_200_OK)
 	
 	def players_info(self, request):
+		
 		response = {}
 		roomId = request.data.get('roomId')
+		print("roomId", roomId, sys.stderr)
 		room = cache.get(f'game_room_{roomId}')
+		print("room", room, sys.stderr)
 		if not room:
 			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 		roomType = room['roomType']
+		roomType = int(roomType)
+		print("roomType", roomType, sys.stderr)
 		if roomType == 0:
 			response = {
 				'matchType': 0,
 				'players': room['players']
 			}
 		elif roomType == 1:
+			
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
+			if not intra_id:
+				return Response({'error': 'Invalid request'}, status=status.HTTP_400_BAD_REQUEST)
+			print("intra_id", intra_id, sys.stderr)
 			game1 = room['game1']
 			game2 = room['game2']
+			if not game1 or not game2:
+				return Response({'error': 'Invalid request'}, status=status.HTTP_400_BAD_REQUEST)
 			for player in game1:
 				if player['intraId'] == intra_id:
 					response = {
 						'matchType': 1,
 						'players': game1
 					}
+					print("response", response, sys.stderr)
 					return Response(response, status=status.HTTP_200_OK)
 
 			for player in game2:
@@ -165,21 +179,12 @@ class GameRoomViewSet(viewsets.ViewSet):
 						'matchType': 2,
 						'players': game2
 					}
-					break
-		return Response(response, status=status.HTTP_200_OK)
-				
-
+					print("response", response, sys.stderr)
+					return Response(response, status=status.HTTP_200_OK)
+		# error
+		return Response({'error': 'Invalid request'}, status=status.HTTP_400_BAD_REQUEST)
 		
 
-		return Response(room['players'], status=status.HTTP_200_OK)
-
-def game_room_test(request):
-	return render(request, 'game_room_test.html')
-
-def socket_api_test(request):
-	return render(request, 'socket_api_test.html')
-
-from django.http import JsonResponse
 
 def get_client_info(request):
     return JsonResponse({
