@@ -153,13 +153,15 @@ class GameRoomViewSet(viewsets.ViewSet):
 		print("roomType", roomType, sys.stderr)
 		mathchType = None
 		if roomType == 0 or roomType == 2:
+			intra_id = CookieManager.get_intra_id_from_cookie(request)
 			if roomType == 2:
 				mathchType = 3
 			else:
 				mathchType = 0
 			response = {
 				'matchType': mathchType,
-				'players': room['players']
+				'players': room['players'],
+				'intraId': intra_id
 			}
 			return Response(response, status=status.HTTP_200_OK)
 		elif roomType == 1:
@@ -178,7 +180,6 @@ class GameRoomViewSet(viewsets.ViewSet):
 						'matchType': 1,
 						'players': game1,
 						'intraId': intra_id
-						
 					}
 					print("response", response, sys.stderr)
 					return Response(response, status=status.HTTP_200_OK)
