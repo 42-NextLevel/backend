@@ -26,6 +26,10 @@ class GameRoomViewSet(viewsets.ViewSet):
 		game_rooms_keys = cache.keys('game_room_*')
 		for room_key in game_rooms_keys:
 			room = cache.get(room_key)
+			# room에 플레이어가 없으면 삭제
+			if len(room['players']) == 0:
+				cache.delete(room_key)
+				continue
 			if room and not room['game_started']:
 				game_room_datas.append({
 					'id': room['id'],
