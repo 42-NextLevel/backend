@@ -157,6 +157,8 @@ import sys
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.cache import cache
 from asgiref.sync import sync_to_async
+from django.utils import timezone
+from .models import GameLog, UserGameLog
 
 logger = logging.getLogger(__name__)
 
@@ -189,15 +191,19 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.game_group_name = None
 		self.player_number = None
 		self.nickname = None
+		self.intra_id = None
 		self.game_state = None
 		self.last_update_time = time.time()
 		self.update_interval = 1/60  # 60 FPS
 		self.backup_task = None
 
 	async def connect(self):
-		self.game_id = self.scope['url_route']['kwargs']['game_id']
+		self.game_id : str = self.scope['url_route']['kwargs']['game_id']
 		self.game_group_name = f'game_{self.game_id}'
-		self.nickname = self.scope['query_string'].decode().split('=')[1]
+		query_string = self.scope['query_string'].decode()
+		query_params = parse_qs(query_string)
+		self.nickname = query_params.get('nickname', [None])[0]
+		self.intra_id = query_params.get('intra_id', [None])[0]
 		
 		self.game_state = GameState.get_game(self.game_id)
 		
@@ -380,6 +386,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			if current_time - self.score_animation['start_time'] >= 1.5:  # 1.5초 후 리셋
 				self.score_animation['active'] = False
 				self.reset_ball()
+				# 리셋 후 공 0.5초간 멈춤
+				
+
+				
 			else:
 				# 득점 애니메이션 중에는 공이 멈춤
 				return
@@ -405,6 +415,20 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				if not self.score_animation['active']:
 					self.game_state['score'][scoring_player] += 1
 					print(f"Score! {scoring_player}", file=sys.stderr)
+					# 스코어가 3점이면 게임 종료
+					if self.game_state['score'][scoring_player] >= 3:
+						self.game_state['game_started'] = False
+						await self.channel_layer.group_send(
+							self.game_group_name,
+							{
+								'type': 'game_end',
+								'winner': scoring_player
+							}
+						)
+					else:
+						self.reset_ball()
+						self.score_animation['active'] = True
+						self.score_animation['start_time'] = current_time
 					
 					# 공의 속도를 조정하여 더 멀리 날아가게 함
 					ball['velocity']['z'] *= 1.5  # 공이 더 멀리 날아가도록 속도 증가
@@ -414,6 +438,66 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					}
 
 		await self.broadcast_partial_state()
+
+	async def game_end(self, event):
+		await self.send(text_data=json.dumps({
+			'type': 'game_end',
+			'winner': event['winner'],
+		}))
+		
+		# 게임 상태 초기화
+		self.game_state['game_started'] = False
+		if self.backup_task:
+			self.backup_task.cancel()
+		
+		# 게임 로그 저장
+		await self.save_game_log(event['winner'])
+		
+		logger.info(f"Game {self.game_id} ended. Winner: {event['winner']}")
+		
+		await asyncio.sleep(10)
+		GameState.remove_game(self.game_id)
+
+	@sync_to_async
+	def save_game_log(self, winner):
+		list = self.game_id.split('_')
+		if not list:
+			return
+		if len(list) != 2:
+			match = 0
+		else:
+			match = list[1]
+		room_id = list[0]
+		room = cache.get(f'game_room_{room_id}')
+		if not room:
+			return
+		start_time = room['started_at']
+		try:
+			# GameLog 생성
+			game_log = GameLog.objects.create(
+				start_time=start_time,
+				match_type=match,
+				address=None
+			)
+			
+			# 각 플레이어의 UserGameLog 생성
+			for player_id, score in self.game_state['players'].items():
+				# 현재 플레이어의 데이터 저장
+				if player_id == self.player_number:
+					user = User.get_by_intra_id(self.intra_id)
+					if user:
+						UserGameLog.objects.create(
+							user_id=user,
+							game_log_id=game_log,
+							nickname=self.nickname,
+							score=score
+						)
+				
+			logger.info(f"Game log saved successfully for game {self.game_id}")
+			# 게임 로그 저장 후 캐시 삭제
+			cache.delete(f'game_room_{room_id}')
+		except Exception as e:
+			logger.error(f"Error saving game log: {e}")
 
 	def reset_ball(self):
 		# 초기 속도를 약간 랜덤하게 설정
