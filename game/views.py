@@ -10,6 +10,7 @@ from django.http import JsonResponse
 from api.utils import CookieManager
 from api.models import User
 import sys
+from django.shortcuts import render
 
 
 ROOM_TIMEOUT = 3600  # 1 hour
@@ -49,7 +50,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 			'game_started': False,
 			'created_at': time.time(),
 			'game1': [],
-			'game2': []
+			'game2': [],
+			'started_at': None
 		}
 		print("Room id:", room_id, sys.stderr)
 		cache.set(f'game_room_{room_id}', room_data, timeout=ROOM_TIMEOUT)
@@ -134,7 +136,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'data': room
 			}
 		)
-
+		room['started_at'] = time.time()
 		return Response(status=status.HTTP_200_OK)
 	
 	def players_info(self, request):
@@ -149,11 +151,17 @@ class GameRoomViewSet(viewsets.ViewSet):
 		roomType = room['roomType']
 		roomType = int(roomType)
 		print("roomType", roomType, sys.stderr)
-		if roomType == 0:
+		mathchType = None
+		if roomType == 0 or roomType == 2:
+			if roomType == 2:
+				mathchType = 3
+			else:
+				mathchType = 0
 			response = {
-				'matchType': 0,
+				'matchType': mathchType,
 				'players': room['players']
 			}
+			return Response(response, status=status.HTTP_200_OK)
 		elif roomType == 1:
 			
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
@@ -168,7 +176,9 @@ class GameRoomViewSet(viewsets.ViewSet):
 				if player['intraId'] == intra_id:
 					response = {
 						'matchType': 1,
-						'players': game1
+						'players': game1,
+						'intraId': intra_id
+						
 					}
 					print("response", response, sys.stderr)
 					return Response(response, status=status.HTTP_200_OK)
@@ -177,7 +187,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 				if player['intraId'] == intra_id:
 					response = {
 						'matchType': 2,
-						'players': game2
+						'players': game2,
+						'intraId': intra_id
 					}
 					print("response", response, sys.stderr)
 					return Response(response, status=status.HTTP_200_OK)
@@ -191,3 +202,6 @@ def get_client_info(request):
         'intra_id': CookieManager.get_intra_id_from_cookie(request),
         'nickname': request.COOKIES.get('nickname')
     })
+
+# def game_test(request):
+# 	return render(request, 'game.html')
