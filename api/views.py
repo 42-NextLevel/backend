@@ -62,7 +62,7 @@ class AuthCodeView(APIView):
 	def get_42_token(self, code):
 		CLIENT_ID = os.environ.get('FT_ID')
 		CLIENT_SECRET = os.environ.get('FT_SECRET')
-		REDIRECT_URI = "https://localhost:443/auth"
+		REDIRECT_URI = f"https://{os.environ.get('SERVER_NAME')}:443/auth"
 		TOKEN_URL = "https://api.intra.42.fr/oauth/token"
 		token_data = {
 			"grant_type": "authorization_code",
