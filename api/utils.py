@@ -65,4 +65,16 @@ class CookieManager:
 		response.delete_cookie('intra_id')
 		response.delete_cookie('nickname')
 		response.delete_cookie('refresh_token')
+		
+		
+		cookies_to_delete = ['intra_id', 'nickname', 'refresh_token']
+		for cookie in cookies_to_delete:
+			response.set_cookie(
+				cookie,
+				value='',
+				max_age=0,
+				expires='Thu, 01 Jan 1970 00:00:00 GMT',
+				path='/'
+			)
+		
 		return response
