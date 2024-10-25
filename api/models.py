@@ -4,7 +4,7 @@ from django.core.exceptions import ObjectDoesNotExist
 class User(models.Model):
 	id = models.AutoField(primary_key=True)
 	intra_id = models.CharField(max_length=100, unique=True)
-	profile_image = models.CharField(max_length=255)
+	profile_image = models.CharField(max_length=255, null=True)
 	email = models.CharField(max_length=255, null=True)
 	
 	USERNAME_FIELD = 'intra_id'

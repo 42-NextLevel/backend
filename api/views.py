@@ -31,7 +31,8 @@ class AuthCodeView(APIView):
 		try:
 			access_token = self.get_42_token(code)
 			intra_id, user_image = self.get_user_info(access_token)
-			
+			if not user_image:
+				user_image = ''
 			print(intra_id, file=sys.stderr)
 			print(user_image, file=sys.stderr)
 			# user = User.get_or_create(intra_id, user_image)
