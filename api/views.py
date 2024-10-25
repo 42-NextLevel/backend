@@ -217,14 +217,6 @@ class CustomTokenRefreshView(TokenRefreshView):
 		return Response({'error': 'GET method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 	
 
-class Auth42InfoView(APIView):
-	def get(self, request):
-		return Response({'uid': os.environ.get('FT_ID')}, status=status.HTTP_200_OK)
-	
-	def post(self, request):
-
-		return Response({'error': 'POST method not allowed'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-
 class SendEmailView(APIView):
 	def get(self, request):
 		print("send email", file=sys.stderr)
