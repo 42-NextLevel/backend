@@ -192,7 +192,7 @@ logger = logging.getLogger(__name__)
 class GamePhysics:
 	def __init__(self):
 		# 게임 오브젝트 크기
-		self.PADDLE_WIDTH = 2.5
+		self.PADDLE_WIDTH = 2.1
 		self.PADDLE_DEPTH = 0.5
 		self.PADDLE_HEIGHT = 1
 		self.BALL_RADIUS = 0.25
@@ -211,7 +211,7 @@ class GamePhysics:
 		self.SPEED_QUANTIZATION = 1
 		
 		# 각도 관련 설정
-		self.ANGLE_VARIANCE = 0.3
+		self.ANGLE_VARIANCE = 0.6
 		self.ANGLE_PRECISION = 2
 		
 		# 게임 영역 경계
@@ -337,7 +337,7 @@ class GamePhysics:
 	def _is_collision(self, ball, paddle_area):
 		"""충돌 여부를 확인합니다."""
 		# 여유 공간을 조금 더 주어 충돌 감지를 더 관대하게 처리
-		extra_tolerance = self.COLLISION_TOLERANCE * 1.5
+		extra_tolerance = self.COLLISION_TOLERANCE * 1.2
 		
 		return (
 			ball['position']['x'] + self.BALL_RADIUS + extra_tolerance > paddle_area['left'] and
