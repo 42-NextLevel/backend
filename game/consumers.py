@@ -442,6 +442,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.update_interval = 1/60  # 60 FPS
 		self.backup_task = None
 		self.physics = GamePhysics()
+		self.last_cache_update = time.time()
+		self.CACHE_UPDATE_INTERVAL = 0.1  # 100ms
 
 	async def connect(self):
 		super().__init__()
@@ -666,9 +668,14 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			input_sequence = data['input_sequence']
 
 			self.game_state['players'][player]['position'] = position
-			
 			self.game_state['lastProcessedInput'][player] = input_sequence
-			await self.save_to_cache()
+
+			# 캐시 업데이트 쓰로틀링
+			current_time = time.time()
+			if current_time - self.last_cache_update >= self.CACHE_UPDATE_INTERVAL:
+				await self.save_to_cache()
+				self.last_cache_update = current_time
+
 			await self.channel_layer.group_send(
 				self.game_group_name,
 				{
@@ -678,10 +685,9 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					'input_sequence': input_sequence
 				}
 			)
-		except KeyError as e:
-			logger.error(f"Missing key in client update data: {e}")
 		except Exception as e:
-			logger.error(f"Unexpected error in handle_client_update: {e}")
+			logger.error(f"Error in handle_client_update: {e}")
+			logger.exception(e)
 
 	async def opponent_update(self, event):
 		if self.player_number != event['player']:
