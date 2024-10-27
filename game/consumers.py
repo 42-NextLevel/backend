@@ -193,7 +193,7 @@ class GamePhysics:
 	def __init__(self):
 		# 게임 오브젝트 크기
 		self.PADDLE_WIDTH = 2.1
-		self.PADDLE_DEPTH = 0.5
+		self.PADDLE_DEPTH = 0.1
 		self.PADDLE_HEIGHT = 1
 		self.BALL_RADIUS = 0.25
 		
@@ -221,8 +221,15 @@ class GamePhysics:
 		# 득점 애니메이션 설정
 		self.SCORE_ANIMATION_DURATION = 1.5
 		self.GAME_RESUME_DELAY = 0.5
-		self.MAX_DELTA_TIME = 1/30  # 최대 델타 타임을 30fps 기준으로 제한
+		self.MAX_DELTA_TIME = 1/60  # 최대 델타 타임을 30fps 기준으로 제한
 		self.PHYSICS_SUBSTEPS = 3    # 물리 연산 세부 단계 수
+		self.BASE_SPEED = 10
+		self.MIN_SPEED = 5
+		self.MAX_SPEED = 30
+		self.SPEED_VARIANCE = 0.2
+		self.SPEED_QUANTIZATION = 1
+		self.ACCELERATION_FACTOR = 1.03  # 각 충돌마다 3% 속도 증가
+		self.MAX_ACCELERATION_SPEED = 35  # 최대 가속 속도 (기존 MAX_SPEED보다 높게 설정)
 	
 	async def process_physics(self, game_state, delta_time):
 		"""게임 물리를 처리합니다."""
@@ -337,7 +344,7 @@ class GamePhysics:
 	def _is_collision(self, ball, paddle_area):
 		"""충돌 여부를 확인합니다."""
 		# 여유 공간을 조금 더 주어 충돌 감지를 더 관대하게 처리
-		extra_tolerance = self.COLLISION_TOLERANCE * 1.2
+		extra_tolerance = self.COLLISION_TOLERANCE * 1.0
 		
 		return (
 			ball['position']['x'] + self.BALL_RADIUS + extra_tolerance > paddle_area['left'] and
@@ -361,14 +368,21 @@ class GamePhysics:
 		# 방향 전환
 		ball['velocity']['z'] *= -1
 		
+		# 현재 속도 계산
+		current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
+		
 		# 각도 및 속도 계산
 		zone_factor = abs(hit_pos)
 		angle = round(self.ANGLE_VARIANCE * zone_factor * math.copysign(1, hit_pos), 
-					 self.ANGLE_PRECISION)
+						self.ANGLE_PRECISION)
 		
-		# 새로운 속도 계산
+		# 새로운 속도 계산 (기본 속도에 가속도 적용)
+		base_speed = current_speed * self.ACCELERATION_FACTOR  # 현재 속도에서 가속
 		speed_mult = 1 + (zone_factor * self.SPEED_VARIANCE)
-		target_speed = round(self.BASE_SPEED * speed_mult / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
+		target_speed = round(base_speed * speed_mult / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
+		
+		# 최대 속도 제한
+		target_speed = min(target_speed, self.MAX_ACCELERATION_SPEED)
 		
 		# 속도 벡터 업데이트
 		ball['velocity']['x'] = round(target_speed * angle, self.VELOCITY_PRECISION)
@@ -396,7 +410,8 @@ class GamePhysics:
 		"""최종 속도를 제한하고 조정합니다."""
 		current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
 		current_speed = round(current_speed / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
-		current_speed = max(self.MIN_SPEED, min(current_speed, self.MAX_SPEED))
+		# 최대 속도 제한을 MAX_ACCELERATION_SPEED로 변경
+		current_speed = max(self.MIN_SPEED, min(current_speed, self.MAX_ACCELERATION_SPEED))
 		
 		# 속도 벡터 정규화
 		magnitude = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
