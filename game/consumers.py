@@ -190,244 +190,299 @@ import logging
 logger = logging.getLogger(__name__)
 
 class GamePhysics:
-    def __init__(self):
-        # 게임 오브젝트 크기
-        self.PADDLE_WIDTH = 2
-        self.PADDLE_DEPTH = 0.5
-        self.PADDLE_HEIGHT = 1
-        self.BALL_RADIUS = 0.25
-        
-        # 충돌 및 물리 설정
-        self.COLLISION_TOLERANCE = 0.1
-        self.POSITION_ZONES = 7
-        self.POSITION_PRECISION = 2
-        self.VELOCITY_PRECISION = 1
-        
-        # 속도 관련 설정
-        self.BASE_SPEED = 10
-        self.MIN_SPEED = 5
-        self.MAX_SPEED = 15
-        self.SPEED_VARIANCE = 0.2
-        self.SPEED_QUANTIZATION = 1
-        
-        # 각도 관련 설정
-        self.ANGLE_VARIANCE = 0.3
-        self.ANGLE_PRECISION = 2
-        
-        # 게임 영역 경계
-        self.FIELD_WIDTH = 5
-        self.FIELD_LENGTH = 7
-        
-        # 득점 애니메이션 설정
-        self.SCORE_ANIMATION_DURATION = 1.5
-        self.GAME_RESUME_DELAY = 0.5
-    
-    async def process_physics(self, game_state, delta_time):
-        """게임 물리를 처리합니다."""
-        ball = game_state['ball']
-        
-        # 공 위치 업데이트
-        ball['position']['x'] += ball['velocity']['x'] * delta_time
-        ball['position']['z'] += ball['velocity']['z'] * delta_time
-        
-        # 벽 충돌 검사
-        if abs(ball['position']['x']) > self.FIELD_WIDTH:
-            ball['position']['x'] = math.copysign(self.FIELD_WIDTH, ball['position']['x'])
-            ball['velocity']['x'] *= -1
-            logger.debug("Ball hit wall")
-        
-        # 득점 검사
-        if abs(ball['position']['z']) > self.FIELD_LENGTH:
-            return 'player1' if ball['position']['z'] > 0 else 'player2'
-        
-        # 패들 충돌 검사
-        for player_id, player in game_state['players'].items():
-            if self._check_paddle_collision(ball, player, player_id):
-                logger.info(f"Ball hit {player_id}'s paddle")
-                break
-        
-        return None
-    
-    def _check_paddle_collision(self, ball, player, player_id):
-        """패들과 공의 충돌을 검사합니다."""
-        z_pos = self.FIELD_LENGTH if player_id == 'player1' else -self.FIELD_LENGTH
-        
-        # 패들의 충돌 영역 계산
-        paddle_area = {
-            'left': player['position']['x'] - (self.PADDLE_WIDTH/2 + self.COLLISION_TOLERANCE),
-            'right': player['position']['x'] + (self.PADDLE_WIDTH/2 + self.COLLISION_TOLERANCE),
-            'front': z_pos - (self.PADDLE_DEPTH/2 + self.COLLISION_TOLERANCE),
-            'back': z_pos + (self.PADDLE_DEPTH/2 + self.COLLISION_TOLERANCE)
-        }
-        
-        # 충돌 검사
-        if not self._is_collision(ball, paddle_area):
-            return False
-            
-        # 충돌 위치 계산
-        hit_pos = self._calculate_hit_position(ball, player)
-        
-        # 충돌 면 판정
-        z_center = (paddle_area['front'] + paddle_area['back']) / 2
-        is_front_hit = abs(ball['position']['z'] - z_center) > self.PADDLE_WIDTH/4
-        
-        # 충돌 처리
-        if is_front_hit:
-            self._handle_front_collision(ball, hit_pos)
-        else:
-            self._handle_side_collision(ball)
-        
-        # 최종 속도 조정
-        self._adjust_final_velocity(ball)
-        
-        return True
-    
-    def _is_collision(self, ball, paddle_area):
-        """충돌 여부를 확인합니다."""
-        return (
-            ball['position']['x'] + self.BALL_RADIUS > paddle_area['left'] and
-            ball['position']['x'] - self.BALL_RADIUS < paddle_area['right'] and
-            ball['position']['z'] + self.BALL_RADIUS > paddle_area['front'] and
-            ball['position']['z'] - self.BALL_RADIUS < paddle_area['back']
-        )
-    
-    def _calculate_hit_position(self, ball, player):
-        """패들에서 공이 맞은 상대적 위치를 계산합니다."""
-        raw_hit = (ball['position']['x'] - player['position']['x']) / (self.PADDLE_WIDTH/2)
-        raw_hit = max(-1.0, min(1.0, raw_hit))
-        
-        # 구간화
-        zone_size = 2.0 / (self.POSITION_ZONES - 1)
-        hit_pos = round(raw_hit / zone_size) * zone_size
-        return round(hit_pos, self.POSITION_PRECISION)
-    
-    def _handle_front_collision(self, ball, hit_pos):
-        """전면/후면 충돌을 처리합니다."""
-        # 방향 전환
-        ball['velocity']['z'] *= -1
-        
-        # 각도 및 속도 계산
-        zone_factor = abs(hit_pos)
-        angle = round(self.ANGLE_VARIANCE * zone_factor * math.copysign(1, hit_pos), 
-                     self.ANGLE_PRECISION)
-        
-        # 새로운 속도 계산
-        speed_mult = 1 + (zone_factor * self.SPEED_VARIANCE)
-        target_speed = round(self.BASE_SPEED * speed_mult / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
-        
-        # 속도 벡터 업데이트
-        ball['velocity']['x'] = round(target_speed * angle, self.VELOCITY_PRECISION)
-        ball['velocity']['z'] = round(math.copysign(
-            target_speed * math.sqrt(1 - angle**2),
-            ball['velocity']['z']
-        ), self.VELOCITY_PRECISION)
-    
-    def _handle_side_collision(self, ball):
-        """측면 충돌을 처리합니다."""
-        ball['velocity']['x'] *= -1
-        
-        # 측면 충돌시 감속
-        current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
-        current_speed *= (1 - self.SPEED_VARIANCE/2)
-        
-        # 속도 벡터 정규화
-        magnitude = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
-        scale = current_speed / magnitude
-        
-        ball['velocity']['x'] = round(ball['velocity']['x'] * scale, self.VELOCITY_PRECISION)
-        ball['velocity']['z'] = round(ball['velocity']['z'] * scale, self.VELOCITY_PRECISION)
-    
-    def _adjust_final_velocity(self, ball):
-        """최종 속도를 제한하고 조정합니다."""
-        current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
-        current_speed = round(current_speed / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
-        current_speed = max(self.MIN_SPEED, min(current_speed, self.MAX_SPEED))
-        
-        # 속도 벡터 정규화
-        magnitude = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
-        velocity_scale = current_speed / magnitude
-        
-        # 최종 속도 적용
-        ball['velocity']['x'] = round(ball['velocity']['x'] * velocity_scale, self.VELOCITY_PRECISION)
-        ball['velocity']['z'] = round(ball['velocity']['z'] * velocity_scale, self.VELOCITY_PRECISION)
-    
-    def reset_ball(self):
-        """공을 초기 상태로 리셋합니다."""
-        initial_speed = 7
-        angle = random.uniform(-math.pi/4, math.pi/4)
-        
-        vx = initial_speed * math.sin(angle)
-        vz = initial_speed * math.cos(angle)
-        
-        # 무작위 방향 선택
-        if random.random() < 0.5:
-            vz *= -1
-        
-        return {
-            'position': {'x': 0, 'y': 0.2, 'z': 0},
-            'velocity': {'x': vx, 'y': 0, 'z': vz}
-        }
+	def __init__(self):
+		# 게임 오브젝트 크기
+		self.PADDLE_WIDTH = 2.5
+		self.PADDLE_DEPTH = 0.5
+		self.PADDLE_HEIGHT = 1
+		self.BALL_RADIUS = 0.25
+		
+		# 충돌 및 물리 설정
+		self.COLLISION_TOLERANCE = 0.1
+		self.POSITION_ZONES = 7
+		self.POSITION_PRECISION = 2
+		self.VELOCITY_PRECISION = 1
+		
+		# 속도 관련 설정
+		self.BASE_SPEED = 10
+		self.MIN_SPEED = 5
+		self.MAX_SPEED = 15
+		self.SPEED_VARIANCE = 0.2
+		self.SPEED_QUANTIZATION = 1
+		
+		# 각도 관련 설정
+		self.ANGLE_VARIANCE = 0.3
+		self.ANGLE_PRECISION = 2
+		
+		# 게임 영역 경계
+		self.FIELD_WIDTH = 5
+		self.FIELD_LENGTH = 7
+		
+		# 득점 애니메이션 설정
+		self.SCORE_ANIMATION_DURATION = 1.5
+		self.GAME_RESUME_DELAY = 0.5
+		self.MAX_DELTA_TIME = 1/30  # 최대 델타 타임을 30fps 기준으로 제한
+		self.PHYSICS_SUBSTEPS = 3    # 물리 연산 세부 단계 수
+	
+	async def process_physics(self, game_state, delta_time):
+		"""게임 물리를 처리합니다."""
+		# delta_time 제한
+		delta_time = min(delta_time, self.MAX_DELTA_TIME)
+		
+		# 물리 연산을 여러 단계로 나누어 처리
+		substep_delta = delta_time / self.PHYSICS_SUBSTEPS
+		
+		for _ in range(self.PHYSICS_SUBSTEPS):
+			scoring_player = await self._process_physics_step(game_state, substep_delta)
+			if scoring_player:
+				return scoring_player
+				
+		return None
+	
+	async def _process_physics_step(self, game_state, delta_time):
+		"""단일 물리 연산 스텝을 처리합니다."""
+		ball = game_state['ball']
+		
+		# 이전 위치 저장 (충돌 감지 보완용)
+		prev_position = {
+			'x': ball['position']['x'],
+			'z': ball['position']['z']
+		}
+		
+		# 공 위치 업데이트
+		ball['position']['x'] += ball['velocity']['x'] * delta_time
+		ball['position']['z'] += ball['velocity']['z'] * delta_time
+		
+		# 이동 거리 계산
+		movement_distance = math.sqrt(
+			(ball['position']['x'] - prev_position['x'])**2 +
+			(ball['position']['z'] - prev_position['z'])**2
+		)
+		
+		# 로그 추가
+		logger.debug(f"Ball movement distance: {movement_distance}")
+		logger.debug(f"Delta time: {delta_time}")
+		logger.debug(f"Ball velocity: {ball['velocity']}")
+		
+		# 벽 충돌 검사
+		if abs(ball['position']['x']) > self.FIELD_WIDTH:
+			ball['position']['x'] = math.copysign(self.FIELD_WIDTH, ball['position']['x'])
+			ball['velocity']['x'] *= -1
+			logger.debug("Ball hit wall")
+		
+		# 득점 검사
+		if abs(ball['position']['z']) > self.FIELD_LENGTH:
+			return 'player1' if ball['position']['z'] > 0 else 'player2'
+		
+		# 패들 충돌 검사
+		for player_id, player in game_state['players'].items():
+			# 이전 위치 정보 전달
+			if self._check_paddle_collision(ball, player, player_id):
+				logger.info(f"Ball hit {player_id}'s paddle")
+				break
+		
+		return None
+
+
+	
+	def _check_paddle_collision(self, ball, player, player_id):
+		"""패들과 공의 충돌을 검사합니다."""
+		z_pos = self.FIELD_LENGTH if player_id == 'player1' else -self.FIELD_LENGTH
+		
+		# 이전 프레임에서의 공의 위치를 고려한 충돌 영역 계산
+		paddle_area = {
+			'left': player['position']['x'] - (self.PADDLE_WIDTH/2 + self.COLLISION_TOLERANCE),
+			'right': player['position']['x'] + (self.PADDLE_WIDTH/2 + self.COLLISION_TOLERANCE),
+			'front': z_pos - (self.PADDLE_DEPTH/2 + self.COLLISION_TOLERANCE),
+			'back': z_pos + (self.PADDLE_DEPTH/2 + self.COLLISION_TOLERANCE)
+		}
+		
+		# 디버깅을 위한 로그 추가
+		logger.debug(f"Ball position: {ball['position']}")
+		logger.debug(f"Paddle area: {paddle_area}")
+		logger.debug(f"Ball velocity: {ball['velocity']}")
+		
+		# 충돌 검사 전에 공이 패들 방향으로 움직이는지 확인
+		moving_towards_paddle = (
+			(player_id == 'player1' and ball['velocity']['z'] > 0) or
+			(player_id == 'player2' and ball['velocity']['z'] < 0)
+		)
+		
+		# 충돌 검사
+		if not moving_towards_paddle:
+			return False
+			
+		if not self._is_collision(ball, paddle_area):
+			return False
+				
+		# 충돌 위치 계산
+		hit_pos = self._calculate_hit_position(ball, player)
+		
+		# 충돌 면 판정 (더 정확한 계산)
+		z_center = (paddle_area['front'] + paddle_area['back']) / 2
+		relative_z = abs(ball['position']['z'] - z_center)
+		is_front_hit = relative_z > (self.PADDLE_DEPTH/4)
+		
+		# 충돌 처리
+		if is_front_hit:
+			self._handle_front_collision(ball, hit_pos)
+		else:
+			self._handle_side_collision(ball)
+		
+		# 최종 속도 조정
+		self._adjust_final_velocity(ball)
+		
+		return True
+	
+	def _is_collision(self, ball, paddle_area):
+		"""충돌 여부를 확인합니다."""
+		# 여유 공간을 조금 더 주어 충돌 감지를 더 관대하게 처리
+		extra_tolerance = self.COLLISION_TOLERANCE * 1.5
+		
+		return (
+			ball['position']['x'] + self.BALL_RADIUS + extra_tolerance > paddle_area['left'] and
+			ball['position']['x'] - self.BALL_RADIUS - extra_tolerance < paddle_area['right'] and
+			ball['position']['z'] + self.BALL_RADIUS + extra_tolerance > paddle_area['front'] and
+			ball['position']['z'] - self.BALL_RADIUS - extra_tolerance < paddle_area['back']
+		)
+	
+	def _calculate_hit_position(self, ball, player):
+		"""패들에서 공이 맞은 상대적 위치를 계산합니다."""
+		raw_hit = (ball['position']['x'] - player['position']['x']) / (self.PADDLE_WIDTH/2)
+		raw_hit = max(-1.0, min(1.0, raw_hit))
+		
+		# 구간화
+		zone_size = 2.0 / (self.POSITION_ZONES - 1)
+		hit_pos = round(raw_hit / zone_size) * zone_size
+		return round(hit_pos, self.POSITION_PRECISION)
+	
+	def _handle_front_collision(self, ball, hit_pos):
+		"""전면/후면 충돌을 처리합니다."""
+		# 방향 전환
+		ball['velocity']['z'] *= -1
+		
+		# 각도 및 속도 계산
+		zone_factor = abs(hit_pos)
+		angle = round(self.ANGLE_VARIANCE * zone_factor * math.copysign(1, hit_pos), 
+					 self.ANGLE_PRECISION)
+		
+		# 새로운 속도 계산
+		speed_mult = 1 + (zone_factor * self.SPEED_VARIANCE)
+		target_speed = round(self.BASE_SPEED * speed_mult / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
+		
+		# 속도 벡터 업데이트
+		ball['velocity']['x'] = round(target_speed * angle, self.VELOCITY_PRECISION)
+		ball['velocity']['z'] = round(math.copysign(
+			target_speed * math.sqrt(1 - angle**2),
+			ball['velocity']['z']
+		), self.VELOCITY_PRECISION)
+	
+	def _handle_side_collision(self, ball):
+		"""측면 충돌을 처리합니다."""
+		ball['velocity']['x'] *= -1
+		
+		# 측면 충돌시 감속
+		current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
+		current_speed *= (1 - self.SPEED_VARIANCE/2)
+		
+		# 속도 벡터 정규화
+		magnitude = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
+		scale = current_speed / magnitude
+		
+		ball['velocity']['x'] = round(ball['velocity']['x'] * scale, self.VELOCITY_PRECISION)
+		ball['velocity']['z'] = round(ball['velocity']['z'] * scale, self.VELOCITY_PRECISION)
+	
+	def _adjust_final_velocity(self, ball):
+		"""최종 속도를 제한하고 조정합니다."""
+		current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
+		current_speed = round(current_speed / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
+		current_speed = max(self.MIN_SPEED, min(current_speed, self.MAX_SPEED))
+		
+		# 속도 벡터 정규화
+		magnitude = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
+		velocity_scale = current_speed / magnitude
+		
+		# 최종 속도 적용
+		ball['velocity']['x'] = round(ball['velocity']['x'] * velocity_scale, self.VELOCITY_PRECISION)
+		ball['velocity']['z'] = round(ball['velocity']['z'] * velocity_scale, self.VELOCITY_PRECISION)
+	
+	def reset_ball(self):
+		"""공을 초기 상태로 리셋합니다."""
+		initial_speed = 7
+		angle = random.uniform(-math.pi/4, math.pi/4)
+		
+		vx = initial_speed * math.sin(angle)
+		vz = initial_speed * math.cos(angle)
+		
+		# 무작위 방향 선택
+		if random.random() < 0.5:
+			vz *= -1
+		
+		return {
+			'position': {'x': 0, 'y': 0.2, 'z': 0},
+			'velocity': {'x': vx, 'y': 0, 'z': vz}
+		}
 
 class GameScoreHandler:
-    def __init__(self, game_state, physics, channel_layer, game_group_name):
-        self.game_state = game_state
-        self.physics = physics
-        self.channel_layer = channel_layer
-        self.game_group_name = game_group_name
-        self.score_animation = {'active': False, 'start_time': 0}
-        self.WIN_SCORE = 5
+	def __init__(self, game_state, physics, channel_layer, game_group_name):
+		self.game_state = game_state
+		self.physics = physics
+		self.channel_layer = channel_layer
+		self.game_group_name = game_group_name
+		self.score_animation = {'active': False, 'start_time': 0}
+		self.WIN_SCORE = 30
 
-    async def handle_scoring(self, scoring_player):
-        """득점 처리를 합니다."""
-        if self.score_animation['active']:
-            return
-            
-        logger.info(f"Score! {scoring_player}")
-        self.game_state['score'][scoring_player] += 1
-        
-        # 승리 조건 확인
-        if self.game_state['score'][scoring_player] >= self.WIN_SCORE:
-            await self._handle_game_end(scoring_player)
-        else:
-            await self._handle_score_animation()
+	async def handle_scoring(self, scoring_player):
+		"""득점 처리를 합니다."""
+		if self.score_animation['active']:
+			return
+			
+		logger.info(f"Score! {scoring_player}")
+		self.game_state['score'][scoring_player] += 1
+		
+		# 승리 조건 확인
+		if self.game_state['score'][scoring_player] >= self.WIN_SCORE:
+			await self._handle_game_end(scoring_player)
+		else:
+			await self._handle_score_animation()
 
-    async def _handle_game_end(self, winner):
-        """게임 종료를 처리합니다."""
-        self.game_state['game_started'] = False
-        await self.channel_layer.group_send(
-            self.game_group_name,
-            {
-                'type': 'game_end',
-                'winner': winner
-            }
-        )
-        logger.info(f"Game ended. Winner: {winner}")
+	async def _handle_game_end(self, winner):
+		"""게임 종료를 처리합니다."""
+		self.game_state['game_started'] = False
+		await self.channel_layer.group_send(
+			self.game_group_name,
+			{
+				'type': 'game_end',
+				'winner': winner
+			}
+		)
+		logger.info(f"Game ended. Winner: {winner}")
 
-    async def _handle_score_animation(self):
-        """득점 애니메이션을 처리합니다."""
-        current_time = time.time()
-        self.score_animation = {
-            'active': True,
-            'start_time': current_time
-        }
-        
-        # 공을 리셋하고 애니메이션 효과를 위한 속도 조정
-        self.game_state['ball'] = self.physics.reset_ball()
-        self.game_state['ball']['velocity']['z'] *= 1.5  # 더 멀리 날아가도록
+	async def _handle_score_animation(self):
+		"""득점 애니메이션을 처리합니다."""
+		current_time = time.time()
+		self.score_animation = {
+			'active': True,
+			'start_time': current_time
+		}
+		
+		# 공을 리셋하고 애니메이션 효과를 위한 속도 조정
+		self.game_state['ball'] = self.physics.reset_ball()
+		self.game_state['ball']['velocity']['z'] *= 1.5  # 더 멀리 날아가도록
 
-    async def update_score_animation(self):
-        """득점 애니메이션 상태를 업데이트합니다."""
-        if not self.score_animation['active']:
-            return False
-            
-        current_time = time.time()
-        if current_time - self.score_animation['start_time'] >= self.physics.SCORE_ANIMATION_DURATION:
-            self.score_animation['active'] = False
-            self.game_state['ball'] = self.physics.reset_ball()
-            await asyncio.sleep(self.physics.GAME_RESUME_DELAY)
-            return False
-            
-        return True
+	async def update_score_animation(self):
+		"""득점 애니메이션 상태를 업데이트합니다."""
+		if not self.score_animation['active']:
+			return False
+			
+		current_time = time.time()
+		if current_time - self.score_animation['start_time'] >= self.physics.SCORE_ANIMATION_DURATION:
+			self.score_animation['active'] = False
+			self.game_state['ball'] = self.physics.reset_ball()
+			await asyncio.sleep(self.physics.GAME_RESUME_DELAY)
+			return False
+			
+		return True
 
 class GamePingPongConsumer(AsyncWebsocketConsumer):
 	def __init__(self):
@@ -560,6 +615,14 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	async def update_game_state(self):
 		current_time = time.time()
 		delta_time = current_time - self.last_update_time
+		
+		# 로그 추가
+		logger.debug(f"Raw delta time: {delta_time}")
+		
+		# 최소 프레임 시간 보장
+		if delta_time < 1/60:  # 60fps 이상의 업데이트는 제한
+			return
+			
 		self.last_update_time = current_time
 
 		# 득점 애니메이션 중인지 확인
