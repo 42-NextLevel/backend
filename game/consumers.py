@@ -470,7 +470,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.player_number = await self.assign_player_number()
 		
 		if self.player_number:
-			print(f"Player number: {self.player_number}", file=sys.stderr)
+			
 			await self.send(json.dumps({
 				'type': 'player_assigned',
 				'player_number': self.player_number
@@ -666,9 +666,9 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			input_sequence = data['input_sequence']
 
 			self.game_state['players'][player]['position'] = position
-			print(f"Player {player} updated: {position}", file=sys.stderr)
+			
 			self.game_state['lastProcessedInput'][player] = input_sequence
-
+			await self.save_to_cache()
 			await self.channel_layer.group_send(
 				self.game_group_name,
 				{
