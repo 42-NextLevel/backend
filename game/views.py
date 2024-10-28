@@ -130,6 +130,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
 
 		room['game_started'] = True
+		room['started_at'] = time.time()
 		cache.set(f'game_room_{roomId}', room, timeout=ROOM_TIMEOUT)
 
 		channel_layer = get_channel_layer()
@@ -140,7 +141,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'data': room
 			}
 		)
-		room['started_at'] = time.time()
+		
 		return Response(status=status.HTTP_200_OK)
 	
 	def players_info(self, request):

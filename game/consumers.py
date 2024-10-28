@@ -222,7 +222,6 @@ class GamePhysics:
 		self.SCORE_ANIMATION_DURATION = 1.5
 		self.GAME_RESUME_DELAY = 0.5
 		self.MAX_DELTA_TIME = 1/60  # 최대 델타 타임을 60fps 기준으로 제한
-		self.MIN_UPDATE_INTERVAL = 1/120  # 최소 업데이트 간격 (50ms)
 		self.PHYSICS_SUBSTEPS = 4    # 물리 연산 세부 단계 수
 		self.BASE_SPEED = 10
 		self.MIN_SPEED = 5
@@ -234,9 +233,6 @@ class GamePhysics:
 	
 	async def process_physics(self, game_state, delta_time):
 		"""게임 물리를 처리합니다."""
-		# 최소 업데이트 간격 보장
-		if delta_time < self.MIN_UPDATE_INTERVAL:
-			return None
 		# delta_time 제한
 		delta_time = min(delta_time, self.MAX_DELTA_TIME)
 		
@@ -449,7 +445,7 @@ class GameScoreHandler:
 		self.channel_layer = channel_layer
 		self.game_group_name = game_group_name
 		self.score_animation = {'active': False, 'start_time': 0}
-		self.WIN_SCORE = 30
+		self.WIN_SCORE = 3
 
 	async def handle_scoring(self, scoring_player):
 		"""득점 처리를 합니다."""
@@ -735,12 +731,20 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	@sync_to_async
 	def save_game_log(self, winner):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
-		list = self.game_id.split('_')
-		if not list or len(list) < 2:
+		# 스플릿 되는 경우 안되는 경우
+		room_id = None
+		tmp = self.game_id.split('_')
+		if not tmp or len(tmp) < 2:
+			room_id = self.game_id
+		else:
+			room_id = tmp[1]
+
+		if not tmp or len(tmp) < 2:
 			match = 0
 		else:
-			match = list[1]
-		room_id = list[0]
+			match = tmp[1]
+		# 스플릿이 안되는 경우 
+		
 		room = cache.get(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
