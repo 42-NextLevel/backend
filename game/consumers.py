@@ -732,52 +732,57 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	@sync_to_async
 	def save_game_log(self, winner):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
-		# 스플릿 되는 경우 안되는 경우
-		room_id = None
-		tmp = self.game_id.split('_')
-		if not tmp or len(tmp) < 2:
-			room_id = self.game_id
-		else:
-			room_id = tmp[0]
-
-		if not tmp or len(tmp) < 2:
-			match = 0
-		else:
-			match = tmp[1]
-		# 스플릿이 안되는 경우 
 		
+		# Parse room_id from game_id
+		room_id = self.game_id.split('_')[0]
+		match = self.game_id.split('_')[1] if len(self.game_id.split('_')) > 1 else '0'
+		
+		# Get room data from cache
 		room = cache.get(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
 			return
 		
-		start_time = datetime.fromisoformat(room['started_at'])
 		try:
-			# GameLog 생성
+			# Handle different timestamp formats
+			if isinstance(room['started_at'], str):
+				start_time = datetime.fromisoformat(room['started_at'])
+			elif isinstance(room['started_at'], (int, float)):
+				start_time = datetime.fromtimestamp(room['started_at'])
+			else:
+				# If started_at is already a datetime object or another format
+				start_time = datetime.now()  # Fallback to current time
+				print(f"Warning: Unknown started_at format: {type(room['started_at'])}", file=sys.stderr)
+			
+			# Create GameLog
 			game_log = GameLog.objects.create(
 				start_time=start_time,
 				match_type=match,
 				address=None
 			)
 			
-			# 각 플레이어의 UserGameLog 생성
-			for player_id, score in self.game_state['players'].items():
-				# 현재 플레이어의 데이터 저장
-				if player_id == self.player_number:
+			# Create UserGameLog for each player
+			for player_number, player_data in self.game_state['players'].items():
+				if player_number == self.player_number:
 					user = User.get_by_intra_id(self.intra_id)
 					if user:
+						score = self.game_state['score'].get(player_number, 0)
 						UserGameLog.objects.create(
 							user_id=user,
 							game_log_id=game_log,
 							nickname=self.nickname,
 							score=score
 						)
-				
+			
 			print(f"Game log saved: {game_log}", file=sys.stderr)
-			# 게임 로그 저장 후 캐시 삭제
+			# Clean up cache after successful save
 			cache.delete(f'game_room_{room_id}')
+			
 		except Exception as e:
-			print(f"Error saving game log: {e}", file=sys.stderr)
+			print(f"Error saving game log: {str(e)}", file=sys.stderr)
+			# Log the full error traceback for debugging
+			import traceback
+			traceback.print_exc(file=sys.stderr)
 
 	def reset_ball(self):
 		# 초기 속도를 약간 랜덤하게 설정
