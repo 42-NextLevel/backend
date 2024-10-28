@@ -222,7 +222,7 @@ class GamePhysics:
 		self.SCORE_ANIMATION_DURATION = 1.5
 		self.GAME_RESUME_DELAY = 0.5
 		self.MAX_DELTA_TIME = 1/60  # 최대 델타 타임을 60fps 기준으로 제한
-		self.MIN_UPDATE_INTERVAL = 1/20  # 최소 업데이트 간격 (50ms)
+		self.MIN_UPDATE_INTERVAL = 1/120  # 최소 업데이트 간격 (50ms)
 		self.PHYSICS_SUBSTEPS = 4    # 물리 연산 세부 단계 수
 		self.BASE_SPEED = 10
 		self.MIN_SPEED = 5
