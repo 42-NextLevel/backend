@@ -499,6 +499,7 @@ class GameScoreHandler:
 			
 		return True
 
+from datetime.datetime import fromisoformat
 
 
 class GamePingPongConsumer(AsyncWebsocketConsumer):
@@ -737,7 +738,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if not tmp or len(tmp) < 2:
 			room_id = self.game_id
 		else:
-			room_id = tmp[1]
+			room_id = tmp[0]
 
 		if not tmp or len(tmp) < 2:
 			match = 0
@@ -749,7 +750,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
 			return
-		start_time = room['started_at']
+		start_time = fromisoformat(room['started_at'])
 		try:
 			# GameLog 생성
 			game_log = GameLog.objects.create(
