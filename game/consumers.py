@@ -221,8 +221,9 @@ class GamePhysics:
 		# 득점 애니메이션 설정
 		self.SCORE_ANIMATION_DURATION = 1.5
 		self.GAME_RESUME_DELAY = 0.5
-		self.MAX_DELTA_TIME = 1/60  # 최대 델타 타임을 30fps 기준으로 제한
-		self.PHYSICS_SUBSTEPS = 3    # 물리 연산 세부 단계 수
+		self.MAX_DELTA_TIME = 1/60  # 최대 델타 타임을 60fps 기준으로 제한
+		self.MIN_UPDATE_INTERVAL = 1/20  # 최소 업데이트 간격 (50ms)
+		self.PHYSICS_SUBSTEPS = 4    # 물리 연산 세부 단계 수
 		self.BASE_SPEED = 10
 		self.MIN_SPEED = 5
 		self.MAX_SPEED = 30
@@ -233,6 +234,9 @@ class GamePhysics:
 	
 	async def process_physics(self, game_state, delta_time):
 		"""게임 물리를 처리합니다."""
+		# 최소 업데이트 간격 보장
+		if delta_time < self.MIN_UPDATE_INTERVAL:
+			return None
 		# delta_time 제한
 		delta_time = min(delta_time, self.MAX_DELTA_TIME)
 		
@@ -499,9 +503,17 @@ class GameScoreHandler:
 			
 		return True
 
+
+
 class GamePingPongConsumer(AsyncWebsocketConsumer):
 	def __init__(self):
 		super().__init__()
+		self.PLAYER_ASSIGN_EVENT = 0
+		self.GAME_START_EVENT = 1
+		self.GAME_STATE_UPDATE_EVENT = 2
+		self.OPPONENT_UPDATE_EVENT = 3
+		self.GAME_END_EVENT = 4
+
 		self.game_id = None
 		self.game_group_name = None
 		self.player_number = None
@@ -517,6 +529,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def connect(self):
 		super().__init__()
+		self.UPDATE_RATE = 1/30  # 30Hz로 감소
+		self.MIN_BROADCAST_INTERVAL = 1/30
 		self.game_id : str = self.scope['url_route']['kwargs']['game_id']
 		self.game_group_name = f'game_{self.game_id}'
 		query_string = self.scope['query_string'].decode()
@@ -525,6 +539,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.intra_id = query_params.get('intra_id', [None])[0]
 		self.score_handler = None
 		self.last_update_time = time.time()
+		self.POSITION_PRECISION = 3
+		self.VELOCITY_PRECISION = 2
 		
 		self.game_state = GameState.get_game(self.game_id)
 		
@@ -605,8 +621,48 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			logger.error(f"Unexpected error in receive: {e}")
 
 	async def start_game(self):
-		self.game_state['game_started'] = True
+		logger.info(f"Starting countdown for game {self.game_id}")
 		
+		# 카운트다운 시작 메시지 전송
+		await self.channel_layer.group_send(
+			self.game_group_name,
+			{
+				'type': 'game_message',
+				'message': {'type': 'countdown_start'}
+			}
+		)
+		
+		# 3초 카운트다운
+		for count in range(3, 0, -1):
+			await self.channel_layer.group_send(
+				self.game_group_name,
+				{
+					'type': 'game_message',
+					'message': {
+						'type': 'countdown',
+						'count': count
+					}
+				}
+			)
+			await asyncio.sleep(1)
+		
+		# GO! 메시지 전송
+		await self.channel_layer.group_send(
+			self.game_group_name,
+			{
+				'type': 'game_message',
+				'message': {
+					'type': 'countdown',
+					'count': 'GO!'
+				}
+			}
+		)
+		
+		# 1초 대기 후 게임 시작
+		await asyncio.sleep(1)
+		
+		# 게임 시작 처리
+		self.game_state['game_started'] = True
 		await self.channel_layer.group_send(
 			self.game_group_name,
 			{
@@ -614,6 +670,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				'message': {'type': 'game_start'}
 			}
 		)
+		
 		logger.info(f"Game {self.game_id} started")
 		asyncio.create_task(self.game_loop())
 
@@ -625,7 +682,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				await self.update_game_state()
 				self.last_update_time = current_time
 			
-			await asyncio.sleep(0.001)
+			await asyncio.sleep(self.UPDATE_RATE/2)
 
 	async def update_game_state(self):
 		current_time = time.time()
@@ -642,6 +699,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 		# 득점 애니메이션 중인지 확인
 		if await self.score_handler.update_score_animation():
+			await self.save_to_cache()  # 득점 시 상태 저장
 			return
 
 		# 게임 물리 처리
@@ -649,6 +707,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		# 득점 처리
 		if scoring_player:
+			await self.save_to_cache()  # 득점 시 상태 저장
 			await self.score_handler.handle_scoring(scoring_player)
 		
 		await self.broadcast_partial_state()
@@ -749,10 +808,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			self.game_state['lastProcessedInput'][player] = input_sequence
 
 			# 캐시 업데이트 쓰로틀링
-			current_time = time.time()
-			if current_time - self.last_cache_update >= self.CACHE_UPDATE_INTERVAL:
-				await self.save_to_cache()
-				self.last_cache_update = current_time
+			# current_time = time.time()
+			# if current_time - self.last_cache_update >= self.CACHE_UPDATE_INTERVAL:
+			# 	await self.save_to_cache()
+			# 	self.last_cache_update = current_time
 
 			await self.channel_layer.group_send(
 				self.game_group_name,
@@ -816,13 +875,14 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		cache.set(f'game_backup_{self.game_id}', self.game_state)
 
 	async def periodic_backup(self):
+		"""중요 게임 상태 주기적 백업"""
 		while True:
 			try:
 				await self.save_to_cache()
-				await asyncio.sleep(300)
+				await asyncio.sleep(30)  # 30초마다 백업
 			except Exception as e:
 				logger.error(f"Error in periodic backup: {e}")
-				await asyncio.sleep(60)
+				await asyncio.sleep(60)  # 오류 발생시 1분 후 재시도
 
 
 
