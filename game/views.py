@@ -206,7 +206,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 def get_client_info(request):
     return JsonResponse({
         'intra_id': CookieManager.get_intra_id_from_cookie(request),
-        'nickname': request.COOKIES.get('nickname')
+        'nickname': CookieManager.get_nickname_from_cookie(request)
     })
 
 # def game_test(request):
