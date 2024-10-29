@@ -175,7 +175,8 @@ class GameState:
 				'score': {'player1': 0, 'player2': 0},
 				'timestamp': int(time.time() * 1000),
 				'lastProcessedInput': {'player1': 0, 'player2': 0},
-				'game_started': False
+				'game_started': False,
+				'match_type': None
 			}
 		return cls.active_games[game_id]
 
@@ -464,11 +465,13 @@ class GameScoreHandler:
 	async def _handle_game_end(self, winner):
 		"""게임 종료를 처리합니다."""
 		self.game_state['game_started'] = False
+		# match 정보를 위해서는 game_id가 필요한데, GamePingPongConsumer에서 가져와야 함
 		await self.channel_layer.group_send(
 			self.game_group_name,
 			{
 				'type': 'game_end',
-				'winner': winner
+				'winner': winner,
+				'match': self.game_state.get('match_type', '0')  # match_type을 game_state에서 가져옴
 			}
 		)
 		logger.info(f"Game ended. Winner: {winner}")
@@ -523,6 +526,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.physics = GamePhysics()
 		self.last_cache_update = time.time()
 		self.CACHE_UPDATE_INTERVAL = 0.1  # 100ms
+		self.match = None
 
 	async def connect(self):
 		super().__init__()
@@ -538,8 +542,11 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.last_update_time = time.time()
 		self.POSITION_PRECISION = 3
 		self.VELOCITY_PRECISION = 2
+		self.match = self.game_id.split('_')[1] if len(self.game_id.split('_')) > 1 else '0'
 		
 		self.game_state = GameState.get_game(self.game_id)
+		self.game_state['match_type'] = self.match
+
 		
 		await self.channel_layer.group_add(self.game_group_name, self.channel_name)
 		await self.accept()
@@ -724,6 +731,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		await self.send(text_data=json.dumps({
 			'type': 'game_end',
 			'winner': event['winner'],
+			'match': event['match']
 		}))
 		
 		# 게임 상태 초기화
@@ -746,7 +754,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		# Parse room_id from game_id
 		room_id = self.game_id.split('_')[0]
-		match = self.game_id.split('_')[1] if len(self.game_id.split('_')) > 1 else '0'
 		
 		# Get room data from cache
 		room = cache.get(f'game_room_{room_id}')
@@ -768,7 +775,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			# Create GameLog
 			game_log = GameLog.objects.create(
 				start_time=start_time,
-				match_type=match,
+				match_type=self.match,
 				address=None
 			)
 			
