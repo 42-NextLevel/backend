@@ -617,48 +617,14 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		except Exception as e:
 			logger.error(f"Unexpected error in receive: {e}")
 
+	async def count_start(self, event):
+		await self.send(json.dumps({
+			'type': 'countdown_start'
+		}))
 	async def start_game(self):
-		logger.info(f"Starting countdown for game {self.game_id}")
 		
-		# 카운트다운 시작 메시지 전송
-		await self.channel_layer.group_send(
-			self.game_group_name,
-			{
-				'type': 'game_message',
-				'message': {'type': 'countdown_start'}
-			}
-		)
-		
-		# 3초 카운트다운
-		for count in range(3, 0, -1):
-			await self.channel_layer.group_send(
-				self.game_group_name,
-				{
-					'type': 'game_message',
-					'message': {
-						'type': 'countdown',
-						'count': count
-					}
-				}
-			)
-			await asyncio.sleep(1)
-		
-		# GO! 메시지 전송
-		await self.channel_layer.group_send(
-			self.game_group_name,
-			{
-				'type': 'game_message',
-				'message': {
-					'type': 'countdown',
-					'count': 'GO!'
-				}
-			}
-		)
-		
-		# 1초 대기 후 게임 시작
 		await asyncio.sleep(1)
 		
-		# 게임 시작 처리
 		self.game_state['game_started'] = True
 		await self.channel_layer.group_send(
 			self.game_group_name,
@@ -668,10 +634,55 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			}
 		)
 		
+		
 		logger.info(f"Game {self.game_id} started")
 		asyncio.create_task(self.game_loop())
+	async def countdown(self, event):
+		print(f"Sending countdown event: {event}", file=sys.stderr)  # 디버그 로그
+		
+		# event에서 count 값을 가져옴 ('countdown' 대신 'count' 사용)
+		await self.send(json.dumps({
+			'type': 'countdown',
+			'count': event.get('count', 3)  # 기본값 3 설정
+		}))
 
 	async def game_loop(self):
+		
+
+		# 시간 동기화 요청
+		server_time = time.time()
+		await self.channel_layer.group_send(
+			self.game_group_name,
+			{
+				'type': 'sync_time',
+				'server_time': server_time
+			}
+		)
+
+		    # 카운트다운 시퀀스 정보 전송
+		countdown_sequence = {
+			'type': 'countdown_sequence',
+			'server_time': server_time,
+			'sequence': [
+				{'count': 3, 'delay': 1},  # 1초 후
+				{'count': 2, 'delay': 2},  # 2초 후
+				{'count': 1, 'delay': 3},  # 3초 후
+				{'count': 'GO!', 'delay': 4}  # 4초 후
+			]
+		}
+
+		await self.channel_layer.group_send(
+			self.game_group_name,
+			{
+				'type': 'game_message',
+				'message': countdown_sequence
+			}
+		)
+
+		await asyncio.sleep(5)  # 카운트다운 완료 + 여유시간
+
+
+
 		while self.game_state['game_started']:
 			current_time = time.time()
 			
@@ -847,11 +858,17 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			}))
 
 	async def sync_time(self, data):
-		await self.send(json.dumps({
-			'type': 'sync_time',
-			'client_timestamp': data['timestamp'],
-			'server_timestamp': int(time.time() * 1000)
-		}))
+		try:
+			# 'timestamp' 또는 'client_time' 키를 사용
+			client_time = data.get('timestamp', data.get('client_time', int(time.time() * 1000)))
+			
+			await self.send(json.dumps({
+				'type': 'sync_time',
+				'client_timestamp': client_time,
+				'server_timestamp': int(time.time() * 1000)
+			}))
+		except Exception as e:
+			logger.error(f"Error in sync_time: {e}, data: {data}")
 
 	async def broadcast_partial_state(self):
 		updates = {
