@@ -5,7 +5,7 @@ class GameLog(models.Model):
     id = models.AutoField(primary_key=True)
     start_time = models.DateTimeField()
     match_type = models.IntegerField()
-    address = models.CharField(max_length=255)
+    address = models.CharField(max_length=255, null=True)
 
     class Meta:
         db_table = 'tb_gamelog'
