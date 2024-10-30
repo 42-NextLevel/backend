@@ -192,6 +192,13 @@ logger = logging.getLogger(__name__)
 
 class GamePhysics:
 	def __init__(self):
+		# 프레임당 최대 이동 거리
+		self.MAX_PADDLE_MOVEMENT = 0.4 # 네트워크 지연을 고려하여 0.4로 설정
+		self.last_paddle_positions = {
+            'player1': 0,
+            'player2': 0
+        }
+		self.last_update_time = time.time()
 		# 게임 오브젝트 크기
 		self.PADDLE_WIDTH = 2.1
 		self.PADDLE_DEPTH = 0.1
@@ -393,7 +400,7 @@ class GamePhysics:
 		), self.VELOCITY_PRECISION)
 	
 	def _handle_side_collision(self, ball):
-		"""측면 충돌을 처리합니다."""
+		# 측면 충돌처리
 		ball['velocity']['x'] *= -1
 		
 		# 측면 충돌시 감속
@@ -408,7 +415,7 @@ class GamePhysics:
 		ball['velocity']['z'] = round(ball['velocity']['z'] * scale, self.VELOCITY_PRECISION)
 	
 	def _adjust_final_velocity(self, ball):
-		"""최종 속도를 제한하고 조정합니다."""
+		# 최종 속도를 제한
 		current_speed = math.sqrt(ball['velocity']['x']**2 + ball['velocity']['z']**2)
 		current_speed = round(current_speed / self.SPEED_QUANTIZATION) * self.SPEED_QUANTIZATION
 		# 최대 속도 제한을 MAX_ACCELERATION_SPEED로 변경
@@ -421,9 +428,33 @@ class GamePhysics:
 		# 최종 속도 적용
 		ball['velocity']['x'] = round(ball['velocity']['x'] * velocity_scale, self.VELOCITY_PRECISION)
 		ball['velocity']['z'] = round(ball['velocity']['z'] * velocity_scale, self.VELOCITY_PRECISION)
+
+	def validate_paddle_movement(self, player_id, new_position, current_time):
+		# 패들 이동이 유효한지 확인
+		delta_time = current_time - self.last_update_time
+		if delta_time <= 0:
+			return False
+
+		# 이전 위치와의 차이 계산
+		last_pos = self.last_paddle_positions[player_id]
+		movement_delta = abs(new_position - last_pos)
+		
+		# 시간당 최대 이동 거리 계산
+		max_allowed_movement = self.MAX_PADDLE_MOVEMENT * delta_time
+		
+		# 비정상적인 이동 감지
+		if movement_delta > max_allowed_movement:
+			logger.warning(f"Invalid paddle movement detected for {player_id}: "
+							f"moved {movement_delta} in {delta_time}s")
+			return False
+			
+		# 유효한 이동인 경우 위치 업데이트
+		self.last_paddle_positions[player_id] = new_position
+		self.last_update_time = current_time
+		return True
 	
 	def reset_ball(self):
-		"""공을 초기 상태로 리셋합니다."""
+		# 공을 초기 상태로 리셋
 		initial_speed = 7
 		angle = random.uniform(-math.pi/4, math.pi/4)
 		
@@ -446,7 +477,7 @@ class GameScoreHandler:
 		self.channel_layer = channel_layer
 		self.game_group_name = game_group_name
 		self.score_animation = {'active': False, 'start_time': 0}
-		self.WIN_SCORE = 3
+		self.WIN_SCORE = 5
 
 	async def handle_scoring(self, scoring_player):
 		"""득점 처리를 합니다."""
@@ -483,6 +514,7 @@ class GameScoreHandler:
 			'active': True,
 			'start_time': current_time
 		}
+		await asyncio.sleep(1)
 		
 		# 공을 리셋하고 애니메이션 효과를 위한 속도 조정
 		self.game_state['ball'] = self.physics.reset_ball()
@@ -825,22 +857,40 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def handle_client_update(self, data):
 		if not self.player_number:
-			logger.error(f"Player number not assigned for {self.nickname}")
 			return
 
 		try:
 			player = data['player']
 			position = data['position']
 			input_sequence = data['input_sequence']
+			
+			# 패들 이동 검증
+			if not self.physics.validate_paddle_movement(player, position['x'], time.time()):
+				logger.error(f"Invalid paddle movement detected for {player}")
+				
+				# 먼저 모든 클라이언트에게 게임 종료를 알림
+				winner = 'player1' if player == 'player2' else 'player2'
+				self.game_state['game_started'] = False
+				
+				# 게임 종료 이벤트 브로드캐스트
+				await self.channel_layer.group_send(
+					self.game_group_name,
+					{
+						'type': 'game_end',
+						'winner': winner,
+						'match': self.match
+					}
+				)
+				
+				# 로그 저장
+				await self.save_game_log(winner)
+				
+				# 충분한 시간을 두고 연결 종료
+				await asyncio.sleep(1)
+				return
 
 			self.game_state['players'][player]['position'] = position
 			self.game_state['lastProcessedInput'][player] = input_sequence
-
-			# 캐시 업데이트 쓰로틀링
-			# current_time = time.time()
-			# if current_time - self.last_cache_update >= self.CACHE_UPDATE_INTERVAL:
-			# 	await self.save_to_cache()
-			# 	self.last_cache_update = current_time
 
 			await self.channel_layer.group_send(
 				self.game_group_name,
@@ -853,7 +903,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			)
 		except Exception as e:
 			logger.error(f"Error in handle_client_update: {e}")
-			logger.exception(e)
 
 	async def opponent_update(self, event):
 		if self.player_number != event['player']:
