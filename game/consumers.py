@@ -793,8 +793,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 						)
 			
 			print(f"Game log saved: {game_log}", file=sys.stderr)
-			# Clean up cache after successful save
 			cache.delete(f'game_room_{room_id}')
+			
 			
 		except Exception as e:
 			print(f"Error saving game log: {str(e)}", file=sys.stderr)

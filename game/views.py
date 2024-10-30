@@ -141,7 +141,38 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'data': room
 			}
 		)
-		
+		# 만약 토너면트 라면 패자 룸 승사 룸 생성 
+		roomType = room['roomType']
+		if roomType == '1': # 토너먼트
+			room_id = str(uuid.uuid4())
+			room1 = {
+				'id': room_id,
+				'name': '결승전',
+				'roomType': 3,
+				'players': [],
+				'host': None,
+				'game_started': False,
+				'created_at': time.time(),
+				'game1': [],
+				'game2': [],
+				'started_at': None
+			}
+			cache.set(f'game_room_{room_id}', room1, timeout=ROOM_TIMEOUT)
+			room_id = str(uuid.uuid4())
+			room2 = {
+				'id': room_id,
+				'name': '3,4위 결정전',
+				'roomType': 4,
+				'players': [],
+				'host': None,
+				'game_started': False,
+				'created_at': time.time(),
+				'game1': [],
+				'game2': [],
+				'started_at': None
+			}
+			cache.set(f'game_room_{room_id}', room2, timeout=ROOM_TIMEOUT)
+
 		return Response(status=status.HTTP_200_OK)
 	
 	def players_info(self, request):
@@ -156,20 +187,15 @@ class GameRoomViewSet(viewsets.ViewSet):
 		roomType = room['roomType']
 		roomType = int(roomType)
 		print("roomType", roomType, sys.stderr)
-		mathchType = None
-		if roomType == 0 or roomType == 2:
+		if roomType == 0 or roomType == 3 or roomType == 4:
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
-			if roomType == 2:
-				mathchType = 3
-			else:
-				mathchType = 0
 			response = {
-				'matchType': mathchType,
+				'matchType': roomType,
 				'players': room['players'],
 				'intraId': intra_id
 			}
 			return Response(response, status=status.HTTP_200_OK)
-		elif roomType == 1:
+		elif roomType == 1 or roomType == 2:
 			
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
 			if not intra_id:
