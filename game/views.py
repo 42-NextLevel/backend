@@ -144,7 +144,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		# 만약 토너면트 라면 패자 룸 승사 룸 생성 
 		roomType = room['roomType']
 		if roomType == '1': # 토너먼트
-			room_id = str(uuid.uuid4())
+			room_id = roomId + '_fianl'
 			room1 = {
 				'id': room_id,
 				'name': '결승전',
@@ -158,7 +158,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'started_at': None
 			}
 			cache.set(f'game_room_{room_id}', room1, timeout=ROOM_TIMEOUT)
-			room_id = str(uuid.uuid4())
+			room_id = roomId + '_3rd'
 			room2 = {
 				'id': room_id,
 				'name': '3,4위 결정전',
