@@ -292,7 +292,8 @@ class GamePhysics:
 		
 		# 득점 검사
 		if abs(ball['position']['z']) > self.FIELD_LENGTH:
-			return 'player1' if ball['position']['z'] > 0 else 'player2'
+			return 'player2' if ball['position']['z'] > 0 else 'player1'
+
 		
 		# 패들 충돌 검사
 		for player_id, player in game_state['players'].items():
@@ -504,7 +505,7 @@ class GameScoreHandler:
 		if self.score_animation['active']:
 			return
 			
-		logger.info(f"Score! {scoring_player}")
+		print(f"Player {scoring_player} scored", file=sys.stderr)
 		self.game_state['score'][scoring_player] += 1
 		
 		# 승리 조건 확인
@@ -646,6 +647,22 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def disconnect(self, close_code):
 		# 남은 플레이어에게 승리 메시지 전송
+		# 게임 종료하는 사람은 패배로 처리
+		print(f"Player {self.nickname} disconnected", file=sys.stderr)
+		if self.game_state['game_started']:
+			if self.player_number == 'player1':
+				winner = 'player2'
+			else:
+				winner = 'player1'
+			await self.channel_layer.group_send(
+				self.game_group_name,
+				{
+					'type': 'game_end',
+					'winner': winner,
+					'match': self.match
+				}
+			)
+
 		if self.backup_task:
 			self.backup_task.cancel()
 			
