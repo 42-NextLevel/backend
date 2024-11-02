@@ -193,10 +193,15 @@ logger = logging.getLogger(__name__)
 class GamePhysics:
 	def __init__(self):
 		# 프레임당 최대 이동 거리
-		self.MAX_PADDLE_MOVEMENT = 0.4 # 네트워크 지연을 고려하여 0.4로 설정
+		self.game_started = False  # 게임 시작 상태 추가
+		self.MAX_PADDLE_MOVEMENT = 0.3 # 네트워크 지연을 고려하여 0.4로 설정
 		self.last_paddle_positions = {
-            'player1': 0,
-            'player2': 0
+			'player1': None,  # None으로 초기화
+			'player2': None   
+		}
+		self.last_movement_times = {  # 각 플레이어의 마지막 이동 시간
+            'player1': time.time(),
+            'player2': time.time()
         }
 		self.last_update_time = time.time()
 		# 게임 오브젝트 크기
@@ -430,27 +435,42 @@ class GamePhysics:
 		ball['velocity']['z'] = round(ball['velocity']['z'] * velocity_scale, self.VELOCITY_PRECISION)
 
 	def validate_paddle_movement(self, player_id, new_position, current_time):
-		# 패들 이동이 유효한지 확인
-		delta_time = current_time - self.last_update_time
-		if delta_time <= 0:
+		"""패들 이동의 유효성을 검사합니다."""
+		# 위치값 반올림 (소수점 3자리까지)
+		new_position = round(new_position, 3)
+
+		# 초기 위치 설정인 경우
+		if self.last_paddle_positions[player_id] is None:
+			self.last_paddle_positions[player_id] = new_position
+			self.last_movement_times[player_id] = current_time
+			return True
+
+		# 패들이 필드 범위를 벗어나는지 확인 (-4 ~ 4)
+		if abs(new_position) > 4:
 			return False
 
-		# 이전 위치와의 차이 계산
-		last_pos = self.last_paddle_positions[player_id]
+		# 이전 위치도 반올림
+		last_pos = round(self.last_paddle_positions[player_id], 3)
+		
+		# 이동 거리 계산 
 		movement_delta = abs(new_position - last_pos)
 		
-		# 시간당 최대 이동 거리 계산
-		max_allowed_movement = self.MAX_PADDLE_MOVEMENT * delta_time
-		
-		# 비정상적인 이동 감지
-		if movement_delta > max_allowed_movement:
-			logger.warning(f"Invalid paddle movement detected for {player_id}: "
-							f"moved {movement_delta} in {delta_time}s")
-			return False
+		# 너무 작은 움직임은 무시 (부동 소수점 오차 방지)
+		if movement_delta < 0.001:
+			return True
 			
-		# 유효한 이동인 경우 위치 업데이트
-		self.last_paddle_positions[player_id] = new_position
-		self.last_update_time = current_time
+		# 단일 프레임에서 최대 이동 거리를 넘지 않는지 확인
+		if movement_delta > self.MAX_PADDLE_MOVEMENT:
+			return False
+
+		# 유효한 이동인 경우 위치와 시간 업데이트
+		self.last_paddle_positions[player_id] = new_position 
+		self.last_movement_times[player_id] = current_time
+
+		# 중요한 위치 변경만 로깅
+		if movement_delta >= 0.1:
+			logger.debug(f"Player {player_id} moved to {new_position}")
+			
 		return True
 	
 	def reset_ball(self):
@@ -721,7 +741,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		await asyncio.sleep(5)  # 카운트다운 완료 + 여유시간
 
 
-
+		self.physics.game_started = True
 		while self.game_state['game_started']:
 			current_time = time.time()
 			
@@ -777,7 +797,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		logger.info(f"Game {self.game_id} ended. Winner: {event['winner']}")
 		
-		await asyncio.sleep(10)
+		await asyncio.sleep(8)
 		GameState.remove_game(self.game_id)
 
 	@sync_to_async
