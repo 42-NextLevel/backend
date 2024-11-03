@@ -188,7 +188,7 @@ class GamePhysics:
 	def __init__(self):
 		# 프레임당 최대 이동 거리
 		self.game_started = False  # 게임 시작 상태 추가
-		self.MAX_PADDLE_MOVEMENT = 0.3 # 네트워크 지연을 고려하여 0.4로 설정
+		self.MAX_PADDLE_MOVEMENT = 0.6 # 네트워크 지연을 고려하여 0.6로 설정
 		self.last_paddle_positions = {
 			'player1': None,  # None으로 초기화
 			'player2': None   
