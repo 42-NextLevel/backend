@@ -15,7 +15,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 		
 
 		self.room_id = self.scope['url_route']['kwargs']['room_id']
-		self.room_group_name = f'game_{self.room_id}'
+		self.room_group_name = f'room_{self.room_id}'
 		print("Cookies: ", self.scope['cookies'], file=sys.stderr)
 		query_string = self.scope['query_string'].decode()
 		query_params = parse_qs(query_string)
@@ -28,12 +28,6 @@ class GameConsumer(AsyncWebsocketConsumer):
 			print(f"Error getting room: {e}", file=sys.stderr)
 			await self.close()
 			return
-
-		self.room_id = self.scope['url_route']['kwargs']['room_id']
-		self.room_group_name = f'game_{self.room_id}'
-		print("Cookies: ", self.scope['cookies'], file=sys.stderr)
-		query_string = self.scope['query_string'].decode()
-		query_params = parse_qs(query_string)
 		
 		intra_id = query_params.get('intra_id', [None])[0]
 		nickname = query_params.get('nickname', [None])[0]
