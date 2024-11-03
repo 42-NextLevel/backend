@@ -144,7 +144,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		# 만약 토너면트 라면 패자 룸 승사 룸 생성 
 		roomType = room['roomType']
 		if roomType == '1': # 토너먼트
-			room_id = roomId + '_fianl'
+			room_id = roomId + '_final'
 			room1 = {
 				'id': room_id,
 				'name': '결승전',
