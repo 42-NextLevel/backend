@@ -143,7 +143,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		)
 		# 만약 토너면트 라면 패자 룸 승사 룸 생성 
 		roomType = room['roomType']
-		if roomType == '1': # 토너먼트
+		if roomType == 1: # 토너먼트
 			room_id = roomId + '_final'
 			room1 = {
 				'id': room_id,
@@ -172,7 +172,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'started_at': None
 			}
 			cache.set(f'game_room_{room_id}', room2, timeout=ROOM_TIMEOUT)
-
+		
 		return Response(status=status.HTTP_200_OK)
 	
 	def players_info(self, request):

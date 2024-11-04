@@ -12,20 +12,22 @@ import asyncio
 
 class GameConsumer(AsyncWebsocketConsumer):
 	async def connect(self):
-		
-
 		self.room_id = self.scope['url_route']['kwargs']['room_id']
 		self.room_group_name = f'room_{self.room_id}'
 		print("Cookies: ", self.scope['cookies'], file=sys.stderr)
 		query_string = self.scope['query_string'].decode()
 		query_params = parse_qs(query_string)
-		try :
+		
+		try:
 			room = await self.get_room()
 			if not room:
+				print(f"WebSocket REJECT - Room not found: {self.room_id}", file=sys.stderr)
+				print(f"Cache key used: game_room_{self.room_id}", file=sys.stderr)
 				await self.close()
 				return
 		except Exception as e:
-			print(f"Error getting room: {e}", file=sys.stderr)
+			print(f"WebSocket REJECT - Error getting room: {e}", file=sys.stderr)
+			print(f"Attempted room_id: {self.room_id}", file=sys.stderr)
 			await self.close()
 			return
 		
@@ -34,31 +36,47 @@ class GameConsumer(AsyncWebsocketConsumer):
 		print(f"nickname: {nickname}, intra_id: {intra_id}", file=sys.stderr)
 		print(f"room_id: {self.room_id}", file=sys.stderr)
 		print(f"room_group_name: {self.room_group_name}", file=sys.stderr)
+		print(f"Room data: {room}", file=sys.stderr)  # 룸 데이터 출력
+		
 		if not nickname or not intra_id:
-			print("Missing required query parameters", file=sys.stderr)
+			print(f"WebSocket REJECT - Missing parameters:", file=sys.stderr)
+			print(f"- Nickname provided: {nickname}", file=sys.stderr)
+			print(f"- Intra ID provided: {intra_id}", file=sys.stderr)
+			print(f"- Query parameters: {query_params}", file=sys.stderr)
+			print(f"- Full query string: {query_string}", file=sys.stderr)
 			await self.close()
 			return
 
 		try:
-			user : User = await self.get_user(intra_id)
+			user: User = await self.get_user(intra_id)
+			if not user:
+				print(f"WebSocket REJECT - User not found for intra_id: {intra_id}", file=sys.stderr)
+				await self.close()
+				return
 			self.user_data = {'intraId': intra_id, 'nickname': nickname, 'profileImage': user.profile_image}
 		except Exception as e:
-			print(f"Error getting user data: {e}", file=sys.stderr)
+			print(f"WebSocket REJECT - Error getting user data: {e}", file=sys.stderr)
+			print(f"Attempted intra_id: {intra_id}", file=sys.stderr)
 			await self.close()
 			return
 
-		await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-		await self.accept()
-		
-		await self.update_room_players(add=True)
+		try:
+			await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+			await self.accept()
+			await self.update_room_players(add=True)
+		except Exception as e:
+			print(f"WebSocket REJECT - Error in final connection steps: {e}", file=sys.stderr)
+			await self.close()
+			return
 
 	async def disconnect(self, close_code):
 		if hasattr(self, 'user_data'):
 			await self.update_room_players(add=False)
 		# if room is empty, delete it
 		room = await self.get_room()
+		players = room.get('players', [])
 		# 게임이 시작되면 삭제하지 않고 대기
-		if room and not room.get('players', []) and room['game_started'] == False:
+		if room and len(players) == 0 and room['game_started'] == False:
 			print("Deleting room", file=sys.stderr)
 			cache.delete(f'game_room_{self.room_id}')
 		await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
@@ -521,6 +539,9 @@ class GameScoreHandler:
 				'match': self.game_state.get('match_type', '0')  # match_type을 game_state에서 가져옴
 			}
 		)
+
+		self
+		
 		logger.info(f"Game ended. Winner: {winner}")
 
 	async def _handle_score_animation(self):
