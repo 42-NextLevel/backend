@@ -57,7 +57,8 @@ class GameConsumer(AsyncWebsocketConsumer):
 			await self.update_room_players(add=False)
 		# if room is empty, delete it
 		room = await self.get_room()
-		if room and not room.get('players', []):
+		# 게임이 시작되면 삭제하지 않고 대기
+		if room and not room.get('players', []) and room['game_started'] == False:
 			print("Deleting room", file=sys.stderr)
 			cache.delete(f'game_room_{self.room_id}')
 		await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
