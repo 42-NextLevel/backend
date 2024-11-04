@@ -81,7 +81,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 	async def update_room_players(self, add: bool):
 		print(f"Updating room players: {add}", file=sys.stderr)
 		room = await self.get_room()
-		if not room:
+		if not room or room['game_started'] == True:
 			return
 
 		players = room.get('players', [])
