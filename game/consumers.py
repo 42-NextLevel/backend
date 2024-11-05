@@ -903,7 +903,17 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
 			# room 삭제 조건
-			cache.delete(f'game_room_{room_id}')
+			# 토너먼트 조심
+			if room_type == 1 or room_type == 2:
+				# 토너먼트 게임 중간일 경우
+				room[f'game{room_type}_ended'] = True
+				if room.get('game1_ended', False) and room.get('game2_ended', False):
+					cache.delete(f'game_room_{room_id}')
+			else:
+				cache.delete(f'game_room_{room_id}')
+				# 토너먼트 게임일 경우
+				# 두 게임 모두 종료되면 room 삭제
+					
 				
 		except Exception as e:
 			print(f"Error saving game log: {str(e)}", file=sys.stderr)

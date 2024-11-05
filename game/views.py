@@ -33,7 +33,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			if len(room['players']) == 0:
 				cache.delete(room_key)
 				continue
-			if room and not room['game_started']:
+			if room and not room['game_started'] and int(room['roomType'] != 3) and int(room['roomType']) != 4:
 				game_room_datas.append({
 					'id': room['id'],
 					'name': room['name'],
@@ -58,6 +58,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 			'created_at': time.time(),
 			'game1': [],
 			'game2': [],
+			'game1_ended': False,
+			'game2_ended': False,
 			'started_at': None
 		}
 		print("Room id:", room_id, sys.stderr)
@@ -158,6 +160,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'created_at': time.time(),
 				'game1': [],
 				'game2': [],
+				'game1_ended': False,
+				'game2_ended': False,
 				'started_at': None
 			}
 			cache.set(f'game_room_{room_id}', room1, timeout=ROOM_TIMEOUT)
@@ -172,6 +176,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'created_at': time.time(),
 				'game1': [],
 				'game2': [],
+				'game1_ended': False,
+				'game2_ended': False,
 				'started_at': None
 			}
 			cache.set(f'game_room_{room_id}', room2, timeout=ROOM_TIMEOUT)
