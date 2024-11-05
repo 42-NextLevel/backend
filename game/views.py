@@ -11,6 +11,9 @@ from api.utils import CookieManager
 from api.models import User
 import sys
 from django.shortcuts import render
+from game.models import GameLog, UserGameLog
+from django.db.models import F
+
 
 
 ROOM_TIMEOUT = 3600  # 1 hour
@@ -226,6 +229,44 @@ class GameRoomViewSet(viewsets.ViewSet):
 					return Response(response, status=status.HTTP_200_OK)
 		# error
 		return Response({'error': 'Invalid request'}, status=status.HTTP_400_BAD_REQUEST)
+	
+	def game_history(self, request):
+		try:
+			# 게임 로그와 유저 정보를 한 번에 조회
+			game_logs = GameLog.objects.select_related().annotate(
+				date=F('start_time')
+			).values('id', 'date', 'match_type')
+
+			result = []
+			for game in game_logs:
+				# 해당 게임의 유저 정보 조회 (점수 순 정렬)
+				users = UserGameLog.objects.select_related('user').filter(
+					game_log_id=game['id']
+				).order_by('-score')[:2]  # 상위 2명만 가져옴
+				
+				# 2명의 유저가 있는 경우만 처리
+				if len(users) == 2:
+					result.append({
+						'matchType': game['match_type'],
+						'date': game['date'].strftime('%Y-%m-%d %H:%M:%S'),
+						'leftId': str(users[0].user.id),
+						'leftScore': str(users[0].score),
+						'leftNick': users[0].nickname,
+						'rightId': str(users[1].user.id),
+						'rightScore': str(users[1].score),
+						'rightNick': users[1].nickname
+					})
+
+			return JsonResponse({
+				'success': True,
+				'data': result
+			})
+
+		except Exception as e:
+			return JsonResponse({
+				'success': False,
+				'message': str(e)
+			}, status=500)
 		
 
 
