@@ -614,7 +614,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.last_update_time = time.time()
 		self.POSITION_PRECISION = 3
 		self.VELOCITY_PRECISION = 2
-		self.match = self.game_id.split('_')[1] if len(self.game_id.split('_')) > 1 else '0'
+		self.match = self.game_id.split('_')[-1]  # 항상 마지막 값이 매치 타입
 		
 		self.game_state = GameState.get_game(self.game_id)
 		self.game_state['match_type'] = self.match
@@ -841,7 +841,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
 		
 		# Game ID에서 room_id와 match 정보 파싱
-		room_id = self.game_id.split('_')[0]
+		room_id = '_'.join(self.game_id.split('_')[:-1])
 		room = cache.get(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
@@ -859,7 +859,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			# GameLog 생성
 			game_log = GameLog.objects.create(
 				start_time=start_time,
-				match_type=room['roomType'],
+				match_type=int(self.match),
 				address=None
 			)
 
