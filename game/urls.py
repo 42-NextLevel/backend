@@ -11,5 +11,6 @@ urlpatterns = [
     path('start', GameRoomViewSet.as_view({'post': 'start_game'}), name='room-start'),
 	path('players', GameRoomViewSet.as_view({'post': 'players_info'}), name='room-players'),
 	path('user-info/', get_client_info, name='get_client_info'),
+	path('history', GameRoomViewSet.as_view({'get': 'game_history'}), name='game-history')
 	# path('test/', game_test, name='game_test'),
 ]

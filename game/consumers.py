@@ -31,7 +31,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 			await self.close()
 			return
 		
-		intra_id = query_params.get('intra_id', [None])[0]
+		intra_id = query_params.get('intraId', [None])[0]
 		nickname = query_params.get('nickname', [None])[0]
 		print(f"nickname: {nickname}, intra_id: {intra_id}", file=sys.stderr)
 		print(f"room_id: {self.room_id}", file=sys.stderr)
@@ -606,7 +606,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		query_string = self.scope['query_string'].decode()
 		query_params = parse_qs(query_string)
 		self.nickname = query_params.get('nickname', [None])[0]
-		self.intra_id = query_params.get('intra_id', [None])[0]
+		self.intra_id = query_params.get('intraId', [None])[0]
 		self.score_handler = None
 		self.last_update_time = time.time()
 		self.POSITION_PRECISION = 3
@@ -868,11 +868,12 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			for player_number, player_data in self.game_state['players'].items():
 				if player_number == self.player_number:
 					user = User.get_by_intra_id(self.intra_id)
+					print()
 					if user:
 						score = self.game_state['score'].get(player_number, 0)
 						UserGameLog.objects.create(
-							user_id=user,
-							game_log_id=game_log,
+							user_id=user.id,
+							game_log_id=game_log.id,
 							nickname=self.nickname,
 							score=score
 						)

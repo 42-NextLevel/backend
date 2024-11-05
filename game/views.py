@@ -230,6 +230,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		# error
 		return Response({'error': 'Invalid request'}, status=status.HTTP_400_BAD_REQUEST)
 	
+	@action(detail=False, methods=['get'])
 	def game_history(self, request):
 		try:
 			# 게임 로그와 유저 정보를 한 번에 조회
