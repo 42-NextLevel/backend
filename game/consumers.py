@@ -109,8 +109,8 @@ class GameConsumer(AsyncWebsocketConsumer):
 		if add:
 
 			# 토너먼트 방식이라서 2명씩 묶어서 게임 시작
-			if len(players) == 0:
-				room['host'] = self.user_data['intraId']
+			if len(players) == 0 and not room.get('host'):
+				room['host'] = self.user_data['nickname']
 
 
 			if self.user_data['intraId'] not in [p['intraId'] for p in players]:
