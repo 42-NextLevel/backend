@@ -850,6 +850,14 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			print(f"Room {room_id} not found", file=sys.stderr)
 			return
 		
+		# roomType에 따른 플레이어 정보 가져오기
+		room_type = int(room['roomType'])
+		
+		# room[f'game{room_type}_ended'] = True 인경우 같이 게임한 유저는 나가야함
+		if room_type in [1, 2] and room.get(f'game{room_type}_ended', False):
+			return
+		
+		
 		try:
 			# started_at 처리
 			if isinstance(room['started_at'], str):
@@ -866,8 +874,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				address=None
 			)
 
-			# roomType에 따른 플레이어 정보 가져오기
-			room_type = int(room['roomType'])
+			
 			print(f"Room type: {room_type}", file=sys.stderr)
 			if room_type == 0:  # 일반 게임
 				players = room['players']
@@ -904,7 +911,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			
 			# room 삭제 조건
 			# 토너먼트 조심
-			if room_type == 1 or room_type == 2:
+			if room_type == 1 or room_type == 2:	
 				# 토너먼트 게임 중간일 경우
 				room[f'game{room_type}_ended'] = True
 				if room.get('game1_ended', False) and room.get('game2_ended', False):
