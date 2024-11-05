@@ -615,6 +615,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.POSITION_PRECISION = 3
 		self.VELOCITY_PRECISION = 2
 		self.match = self.game_id.split('_')[-1]  # 항상 마지막 값이 매치 타입
+		print(f"Game ID: {self.game_id}", file=sys.stderr)
+		print(f"Match type: {self.match}", file=sys.stderr)
 		
 		self.game_state = GameState.get_game(self.game_id)
 		self.game_state['match_type'] = self.match
@@ -842,6 +844,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		# Game ID에서 room_id와 match 정보 파싱
 		room_id = '_'.join(self.game_id.split('_')[:-1])
+		print(f"Room ID: {room_id}", file=sys.stderr)
 		room = cache.get(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
@@ -865,6 +868,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 			# roomType에 따른 플레이어 정보 가져오기
 			room_type = int(room['roomType'])
+			print(f"Room type: {room_type}", file=sys.stderr)
 			if room_type == 0:  # 일반 게임
 				players = room['players']
 			elif room_type == 1:  # 토너먼트 첫 번째 게임
