@@ -135,7 +135,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
 
 		room['game_started'] = True
-		room['started_at'] = time.time()
+		room['started_at'] = time.time() + (9 * 3600)  # 9시간을 초 단위로 추가
 		cache.set(f'game_room_{roomId}', room, timeout=ROOM_TIMEOUT)
 
 		channel_layer = get_channel_layer()
