@@ -55,7 +55,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			'players': [],
 			'host': request.data.get('nickname'),
 			'game_started': False,
-			'created_at': time.time(),
+			'created_at': time.time() + (9 * 3600),  # 한국 시간
 			'game1': [],
 			'game2': [],
 			'game1_ended': False,
