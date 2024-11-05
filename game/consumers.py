@@ -840,54 +840,64 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	def save_game_log(self, winner):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
 		
-		# Parse room_id from game_id
+		# Game ID에서 room_id와 match 정보 파싱
 		room_id = self.game_id.split('_')[0]
-		
-		# Get room data from cache
 		room = cache.get(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
 			return
 		
 		try:
-			# Handle different timestamp formats
+			# started_at 처리
 			if isinstance(room['started_at'], str):
 				start_time = datetime.fromisoformat(room['started_at'])
 			elif isinstance(room['started_at'], (int, float)):
 				start_time = datetime.fromtimestamp(room['started_at'])
 			else:
-				# If started_at is already a datetime object or another format
-				start_time = datetime.now()  # Fallback to current time
-				print(f"Warning: Unknown started_at format: {type(room['started_at'])}", file=sys.stderr)
+				start_time = datetime.now()
 			
-			# Create GameLog
+			# GameLog 생성
 			game_log = GameLog.objects.create(
 				start_time=start_time,
-				match_type=self.match,
+				match_type=room['roomType'],
 				address=None
 			)
-			
-			# Create UserGameLog for each player
-			for player_number, player_data in self.game_state['players'].items():
-				if player_number == self.player_number:
-					user = User.get_by_intra_id(self.intra_id)
-					print()
-					if user:
-						score = self.game_state['score'].get(player_number, 0)
-						UserGameLog.objects.create(
-							user_id=user.id,
-							game_log_id=game_log.id,
-							nickname=self.nickname,
-							score=score
-						)
+
+			# roomType에 따른 플레이어 정보 가져오기
+			room_type = int(room['roomType'])
+			if room_type == 0:  # 일반 게임
+				players = room['players']
+			elif room_type == 1:  # 토너먼트 첫 번째 게임
+				players = room['game1']
+			elif room_type == 2:  # 토너먼트 두 번째 게임
+				players = room['game2']
+			elif room_type == 3:  # 결승전
+				players = room['players']
+			elif room_type == 4:  # 3,4위전
+				players = room['players']
+			else:
+				players = room['players']
+				
+			# 플레이어 로그 저장
+			for i, player_data in enumerate(players, 1):
+				player_number = f'player{i}'
+				user = User.get_by_intra_id(player_data['intraId'])
+				if user:
+					score = self.game_state['score'].get(player_number, 0)
+					UserGameLog.objects.create(
+						user_id=user.id,
+						game_log_id=game_log.id,
+						nickname=player_data['nickname'],
+						score=score
+					)
 			
 			print(f"Game log saved: {game_log}", file=sys.stderr)
+			
+			# room 삭제 조건
 			cache.delete(f'game_room_{room_id}')
-			
-			
+				
 		except Exception as e:
 			print(f"Error saving game log: {str(e)}", file=sys.stderr)
-			# Log the full error traceback for debugging
 			import traceback
 			traceback.print_exc(file=sys.stderr)
 
