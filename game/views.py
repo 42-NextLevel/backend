@@ -237,7 +237,6 @@ class GameRoomViewSet(viewsets.ViewSet):
 			game_logs = GameLog.objects.select_related().annotate(
 				date=F('start_time')
 			).values('id', 'date', 'match_type')
-
 			result = []
 			for game in game_logs:
 				# 해당 게임의 유저 정보 조회 (점수 순 정렬)
@@ -259,13 +258,12 @@ class GameRoomViewSet(viewsets.ViewSet):
 					})
 
 			return JsonResponse({
-				'success': True,
-				'data': result
-			})
+				'history': result
+			}, json_dumps_params={'ensure_ascii': False})  # 한글 처리를 위해 ensure_ascii=False 추가
+
 
 		except Exception as e:
 			return JsonResponse({
-				'success': False,
 				'message': str(e)
 			}, status=500)
 		
