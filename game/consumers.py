@@ -873,8 +873,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				players = room['players']
 			elif room_type == 1:  # 토너먼트 첫 번째 게임
 				players = room['game1']
+				print("game1 players:", players, file=sys.stderr)
 			elif room_type == 2:  # 토너먼트 두 번째 게임
 				players = room['game2']
+				print("game2 players:", players, file=sys.stderr)
 			elif room_type == 3:  # 결승전
 				players = room['players']
 			elif room_type == 4:  # 3,4위전
@@ -886,6 +888,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			for i, player_data in enumerate(players, 1):
 				player_number = f'player{i}'
 				user = User.get_by_intra_id(player_data['intraId'])
+				print(f"Player {player_number}: {player_data['nickname']}, {player_data['intraId']}", file=sys.stderr)
 				if user:
 					score = self.game_state['score'].get(player_number, 0)
 					UserGameLog.objects.create(
@@ -894,6 +897,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 						nickname=player_data['nickname'],
 						score=score
 					)
+				else:
+					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
 			
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
