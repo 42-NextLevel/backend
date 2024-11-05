@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import User
+from api.models import User
 
 class GameLog(models.Model):
     id = models.AutoField(primary_key=True)
