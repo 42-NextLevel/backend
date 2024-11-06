@@ -162,7 +162,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'game2': [],
 				'game1_ended': False,
 				'game2_ended': False,
-				'started_at': None
+				'started_at': None,
+				'disconnected': 0
 			}
 			cache.set(f'game_room_{room_id}', room1, timeout=ROOM_TIMEOUT)
 			room_id = roomId + '_3rd'
@@ -178,7 +179,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'game2': [],
 				'game1_ended': False,
 				'game2_ended': False,
-				'started_at': None
+				'started_at': None,
+				'disconnected': 0
 			}
 			cache.set(f'game_room_{room_id}', room2, timeout=ROOM_TIMEOUT)
 		

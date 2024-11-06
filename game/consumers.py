@@ -192,7 +192,8 @@ class GameState:
 				'timestamp': int(time.time() * 1000),
 				'lastProcessedInput': {'player1': 0, 'player2': 0},
 				'game_started': False,
-				'match_type': None
+				'match_type': None,
+				'disconnected_player': []
 			}
 		return cls.active_games[game_id]
 
@@ -515,6 +516,7 @@ class GameScoreHandler:
 		self.game_group_name = game_group_name
 		self.score_animation = {'active': False, 'start_time': 0}
 		self.WIN_SCORE = 5
+		self.game_end = False
 
 	async def handle_scoring(self, scoring_player):
 		"""득점 처리를 합니다."""
@@ -533,6 +535,7 @@ class GameScoreHandler:
 	async def _handle_game_end(self, winner):
 		"""게임 종료를 처리합니다."""
 		self.game_state['game_started'] = False
+		self.game_end = True
 		# match 정보를 위해서는 game_id가 필요한데, GamePingPongConsumer에서 가져와야 함
 		await self.channel_layer.group_send(
 			self.game_group_name,
@@ -668,9 +671,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def disconnect(self, close_code):
 		# 남은 플레이어에게 승리 메시지 전송
-		# 게임 종료하는 사람은 패배로 처리
 		print(f"Player {self.nickname} disconnected", file=sys.stderr)
-		if self.game_state['game_started']:
+		if self.score_handler.game_end == False:
 			if self.player_number == 'player1':
 				winner = 'player2'
 			else:
@@ -684,6 +686,14 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				}
 			)
 
+			self.handle_room_disconnect()
+			
+		# 게임 종료 처리
+		if self.score_handler:
+			self.score_handler.game_end = True
+			self.score_handler = None
+
+
 		if self.backup_task:
 			self.backup_task.cancel()
 			
@@ -696,6 +706,50 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				
 		await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
 		logger.info(f"Player {self.nickname} disconnected")
+
+	async def handle_room_disconnect(self):
+		# 1. 플레이어 탈주 기록 추가
+		self.game_state['disconnected_player'].append(self.player_number)
+		
+		# 2. 탈주자 수에 따른 처리
+		if len(self.game_state['disconnected_player']) == 2:
+			# 같은 게임에서 2명 탈주한 경우 final 룸 처리
+			room_final = await cache.get(f'game_room_{self.game_id}_final')
+			if room_final:
+				num_disconnected = int(room_final.get('disconnected', 0))
+				if num_disconnected > 0:
+					await cache.delete(f'game_room_{self.game_id}_final')
+				else:
+					room_final['disconnected'] = num_disconnected + 1
+					try:
+						await cache.set(
+							f'game_room_{self.game_id}_final', 
+							room_final, 
+							timeout=ROOM_TIMEOUT
+						)
+					except Exception as e:
+						logger.error(f"Cache set error in final room: {e}")
+		else:
+			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
+			room_3rd = await cache.get(f'game_room_{self.game_id}_3rd')
+			if room_3rd:
+				num_disconnected = int(room_3rd.get('disconnected', 0))
+				if num_disconnected > 0:
+					await cache.delete(f'game_room_{self.game_id}_3rd')
+				else:
+					room_3rd['disconnected'] = num_disconnected + 1
+					try:
+						await cache.set(
+							f'game_room_{self.game_id}_3rd', 
+							room_3rd, 
+							timeout=ROOM_TIMEOUT
+						)
+					except Exception as e:
+						logger.error(f"Cache set error in 3rd room: {e}")
+
+		# 3. 게임 상태 업데이트
+		await self.update_game_state()
+
 
 	async def receive(self, text_data):
 		try:
