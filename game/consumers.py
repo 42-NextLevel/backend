@@ -661,7 +661,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			return
 		
 		game_cache_key = f'game_status_{self.game_id}'
-		game_status = await cache.get(game_cache_key)
+		game_status = await sync_to_async(cache.get)(game_cache_key)
 		
 		if game_status is None:
 			# 최초 접속인 경우
@@ -946,7 +946,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			self.backup_task.cancel()
 		
 		game_cache_key = f'game_status_{self.game_id}'
-		await cache.set(game_cache_key, False, timeout=180)  # 3분 후 자동 삭제
+		await sync_to_async(cache.set)(game_cache_key, False, timeout=180)
+
 		
 		# 게임 로그 저장
 		print(f"Game {self.game_id} ended. Winner: {event['winner']}", file=sys.stderr)
