@@ -639,8 +639,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def connect(self):
 		super().__init__()
-		self.UPDATE_RATE = 1/30  # 30Hz로 감소
-		self.MIN_BROADCAST_INTERVAL = 1/30
+		self.UPDATE_RATE = 1/60  # 
 		self.game_id : str = self.scope['url_route']['kwargs']['game_id']
 		self.game_group_name = f'game_{self.game_id}'
 		query_string = self.scope['query_string'].decode()
@@ -656,6 +655,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		print(f"Match type: {self.match}", file=sys.stderr)
 		
 		self.game_state = GameState.get_game(self.game_id)
+		if self.game_state['game_started']:
+			print(f"WebSocket REJECT - Game already started for {self.nickname}", file=sys.stderr)
+			await self.close()
+			return
 		self.game_state['match_type'] = self.match
 
 		
