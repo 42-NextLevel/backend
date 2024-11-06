@@ -654,6 +654,13 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			print(f"WebSocket REJECT - Game already started for {self.nickname}", file=sys.stderr)
 			await self.close()
 			return
+		
+		if len(self.game_state.get('disconnected_player', [])) > 0:
+			print(f"WebSocket REJECT - Game destroyed due to disconnects", file=sys.stderr)
+			await self.close()
+			return
+		
+		
 		self.game_state['match_type'] = self.match
 
 		
@@ -741,7 +748,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def handle_room_disconnect(self):
 		# 1. 플레이어 탈주 기록 추가
-		self.game_state['disconnected_player'].append(self.player_number)
+		self.game_state['disconnected_player'].append(self.nickname)
 		
 		# 2. 탈주자 수에 따른 처리
 		if len(self.game_state['disconnected_player']) == 2:
