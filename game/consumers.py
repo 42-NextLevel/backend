@@ -37,6 +37,11 @@ class GameConsumer(AsyncWebsocketConsumer):
 		print(f"room_id: {self.room_id}", file=sys.stderr)
 		print(f"room_group_name: {self.room_group_name}", file=sys.stderr)
 		print(f"Room data: {room}", file=sys.stderr)  # 룸 데이터 출력
+		# room에 내가 들어가 있는지 확인
+		if not room.get('players') or not any([p['intraId'] == intra_id for p in room['players']]):
+			print(f"WebSocket REJECT - User not in room", file=sys.stderr)
+			await self.close()
+			return
 		
 		if not nickname or not intra_id:
 			print(f"WebSocket REJECT - Missing parameters:", file=sys.stderr)
