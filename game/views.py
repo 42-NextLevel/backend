@@ -255,6 +255,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				# 2명의 유저가 있는 경우만 처리
 				if len(users) == 2:
 					result.append({
+						'game_id': game['id'],
 						'matchType': game['match_type'],
 						'date': game['date'].strftime('%Y-%m-%d %H:%M:%S'),
 						'leftId': str(users[0].user.id),
