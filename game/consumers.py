@@ -650,10 +650,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		print(f"Match type: {self.match}", file=sys.stderr)
 		
 		self.game_state = GameState.get_game(self.game_id)
-		if self.game_state['game_started']:
-			print(f"WebSocket REJECT - Game already started for {self.nickname}", file=sys.stderr)
-			await self.close()
-			return
+		# if self.game_state['game_started']:
+		# 	print(f"WebSocket REJECT - Game already started for {self.nickname}", file=sys.stderr)
+		# 	await self.close()
+		# 	return
 		# 탈주자 인지 확인
 		if self.nickname in self.game_state['disconnected_player']:
 			print(f"Player {self.nickname} reconnecting to game", file=sys.stderr)
