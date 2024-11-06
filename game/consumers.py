@@ -128,6 +128,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 			return
 
 		players = room.get('players', [])
+		print(f"Current players: {players}", file=sys.stderr)
 		if not add and len(players) == 0:
 			cache.delete(f'game_room_{self.room_id}')
 			return
@@ -150,10 +151,11 @@ class GameConsumer(AsyncWebsocketConsumer):
 			players = [p for p in players if p['intraId'] != self.user_data['intraId']]
 			# change host if host leaves
 			print(f"Host: {room['host']}, User: {self.user_data['intraId']}", file=sys.stderr)
-			if room['host'] == self.user_data['intraId']:
+			print(f"Players: {players}", file=sys.stderr)
+			if room['host'] == self.user_data['nickname']:
 				if players:
 					print("Changing host", file=sys.stderr)
-					room['host'] = players[0]['intraId']
+					room['host'] = players[0]['nickname']
 				else:
 					room['host'] = None
 					cache.delete(f'game_room_{self.room_id}')
