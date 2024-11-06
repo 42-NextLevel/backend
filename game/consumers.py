@@ -654,7 +654,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			print(f"WebSocket REJECT - Game already started for {self.nickname}", file=sys.stderr)
 			await self.close()
 			return
-		
+		print("game_state: ", self.game_state, file=sys.stderr)
 		if len(self.game_state.get('disconnected_player', [])) > 0:
 			print(f"WebSocket REJECT - Game destroyed due to disconnects", file=sys.stderr)
 			await self.close()
@@ -728,6 +728,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		# 남은 플레이어에게 승리 메시지 전송
 		print(f"Player {self.nickname} disconnected", file=sys.stderr)
 		if self.score_handler.game_end == False:
+
 			if self.player_number == 'player1':
 				winner = 'player2'
 			else:
@@ -740,8 +741,9 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					'match': self.match
 				}
 			)
-
+			
 			self.handle_room_disconnect()
+
 			
 		# 게임 종료 처리
 		if self.score_handler:
@@ -787,6 +789,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			self.send_to_room_socket(room_id=room_final, event='destroy')
 		else:
 			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
+			print("Handling 3rd room disconnect", file=sys.stderr)
 			room_3rd = await cache.get(f'game_room_{self.game_id}_3rd')
 			if room_3rd:
 				num_disconnected = int(room_3rd.get('disconnected', 0))
