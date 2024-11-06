@@ -70,16 +70,41 @@ class GameConsumer(AsyncWebsocketConsumer):
 			return
 
 	async def disconnect(self, close_code):
-		if hasattr(self, 'user_data'):
-			await self.update_room_players(add=False)
-		# if room is empty, delete it
-		room = await self.get_room()
-		players = room.get('players', [])
-		# 게임이 시작되면 삭제하지 않고 대기
-		if room and len(players) == 0 and room['game_started'] == False:
-			print("Deleting room", file=sys.stderr)
-			cache.delete(f'game_room_{self.room_id}')
-		await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+		try:
+			if hasattr(self, 'user_data'):
+				await self.update_room_players(add=False)
+			
+			# room이 없는 경우 처리
+			room = await self.get_room()
+			if not room:
+				await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+				return
+				
+			players = room.get('players', [])
+			match_type = int(room.get('match_type', '0'))
+			
+			# tournament 게임(1, 2번 매치)에서 게임 시작 전 유저 나가면 destroy
+			if (match_type in [1, 2]) and not room['game_started']:
+				print(f"Tournament game {match_type} destroyed before start", file=sys.stderr)
+				await self.channel_layer.group_send(
+					self.room_group_name,
+					{
+						'type': 'destroy'
+					}
+				)
+				await cache.delete(f'game_room_{self.room_id}')
+				
+			# 일반 게임에서 모든 플레이어가 나가고 게임 시작 전이면 삭제
+			elif len(players) == 0 and not room['game_started']:
+				print(f"Empty room {self.room_id} deleted", file=sys.stderr)
+				await cache.delete(f'game_room_{self.room_id}')
+				
+			await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+			
+		except Exception as e:
+			logger.error(f"Error in disconnect: {e}")
+			# 에러가 발생해도 반드시 group_discard는 실행
+			await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
 	@database_sync_to_async
 	def get_user(self, intra_id: str):
