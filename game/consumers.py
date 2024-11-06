@@ -124,8 +124,10 @@ class GameConsumer(AsyncWebsocketConsumer):
 		else:
 			players = [p for p in players if p['intraId'] != self.user_data['intraId']]
 			# change host if host leaves
+			print(f"Host: {room['host']}, User: {self.user_data['intraId']}", file=sys.stderr)
 			if room['host'] == self.user_data['intraId']:
 				if players:
+					print("Changing host", file=sys.stderr)
 					room['host'] = players[0]['intraId']
 				else:
 					room['host'] = None
