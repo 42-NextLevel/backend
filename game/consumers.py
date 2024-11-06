@@ -731,6 +731,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 						)
 					except Exception as e:
 						logger.error(f"Cache set error in final room: {e}")
+			self.send_to_room_socket(room_id=room_final, event='destroy')
 		else:
 			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
 			room_3rd = await cache.get(f'game_room_{self.game_id}_3rd')
@@ -748,6 +749,9 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 						)
 					except Exception as e:
 						logger.error(f"Cache set error in 3rd room: {e}")
+			self.send_to_room_socket(room_id=room_3rd, event='destroy')
+
+			
 
 		# 3. 게임 상태 업데이트
 		await self.update_game_state()
@@ -1118,10 +1122,12 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			except Exception as e:
 				logger.error(f"Error in periodic backup: {e}")
 				await asyncio.sleep(60)  # 오류 발생시 1분 후 재시도
-
-
-
-# DB 게임시작할때 초기 데이터 넣고
-# 3점 게임 방식
-# 관전 방식 
-# 
+	
+	async def send_to_room_socket(self, room_id, event_type, data):
+		room_group_name = f'room_{room_id}'
+		await self.channel_layer.group_send(
+			room_group_name,
+			{
+				'type': event_type
+			}
+		)
