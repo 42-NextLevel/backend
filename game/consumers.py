@@ -654,24 +654,25 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			print(f"WebSocket REJECT - Game already started for {self.nickname}", file=sys.stderr)
 			await self.close()
 			return
-		print("game_state: ", self.game_state, file=sys.stderr)
-		if len(self.game_state.get('disconnected_player', [])) > 0:
-			print(f"WebSocket REJECT - Game destroyed due to disconnects", file=sys.stderr)
-			await self.close()
-			return
+		# 탈주자 인지 확인
+		if self.nickname in self.game_state['disconnected_player']:
+			print(f"Player {self.nickname} reconnecting to game", file=sys.stderr)
+			# disconnected_player 목록에서 제거
+			self.game_state['disconnected_player'].remove(self.nickname)
+			
 		
-		game_cache_key = f'game_status_{self.game_id}'
-		game_status = await sync_to_async(cache.get)(game_cache_key)
+		# game_cache_key = f'game_status_{self.game_id}'
+		# game_status = await sync_to_async(cache.get)(game_cache_key)
 		
-		if game_status is None:
-			# 최초 접속인 경우
-			GAME_TIMEOUT = 60 * 30  # 30분
-			await cache.set(game_cache_key, True, timeout=GAME_TIMEOUT)
-		elif game_status is True:
-			# 이미 게임이 진행중인 경우
-			print(f"WebSocket REJECT - Game in progress: {self.game_id}", file=sys.stderr)
-			await self.close()
-			return
+		# if game_status is None:
+		# 	# 최초 접속인 경우
+		# 	GAME_TIMEOUT = 60 * 30  # 30분
+		# 	await cache.set(game_cache_key, True, timeout=GAME_TIMEOUT)
+		# elif game_status is True:
+		# 	# 이미 게임이 진행중인 경우
+		# 	print(f"WebSocket REJECT - Game in progress: {self.game_id}", file=sys.stderr)
+		# 	await self.close()
+		# 	return
 		
 		print("game_state: ", self.game_state, file=sys.stderr)
 		self.game_state['match_type'] = self.match
@@ -727,22 +728,22 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	async def disconnect(self, close_code):
 		# 남은 플레이어에게 승리 메시지 전송
 		print(f"Player {self.nickname} disconnected", file=sys.stderr)
-		if self.score_handler.game_end == False:
+		# if self.score_handler.game_end == False:
 
-			if self.player_number == 'player1':
-				winner = 'player2'
-			else:
-				winner = 'player1'
-			await self.channel_layer.group_send(
-				self.game_group_name,
-				{
-					'type': 'game_end',
-					'winner': winner,
-					'match': self.match
-				}
-			)
+		# 	if self.player_number == 'player1':
+		# 		winner = 'player2'
+		# 	else:
+		# 		winner = 'player1'
+		# 	await self.channel_layer.group_send(
+		# 		self.game_group_name,
+		# 		{
+		# 			'type': 'game_end',
+		# 			'winner': winner,
+		# 			'match': self.match
+		# 		}
+		# 	)
 			
-			self.handle_room_disconnect()
+		self.handle_room_disconnect()
 
 			
 		# 게임 종료 처리
