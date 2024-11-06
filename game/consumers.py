@@ -660,7 +660,20 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			await self.close()
 			return
 		
+		game_cache_key = f'game_status_{self.game_id}'
+		game_status = await cache.get(game_cache_key)
 		
+		if game_status is None:
+			# 최초 접속인 경우
+			GAME_TIMEOUT = 60 * 30  # 30분
+			await cache.set(game_cache_key, True, timeout=GAME_TIMEOUT)
+		elif game_status is True:
+			# 이미 게임이 진행중인 경우
+			print(f"WebSocket REJECT - Game in progress: {self.game_id}", file=sys.stderr)
+			await self.close()
+			return
+		
+		print("game_state: ", self.game_state, file=sys.stderr)
 		self.game_state['match_type'] = self.match
 
 		
@@ -695,6 +708,9 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				'reason': 'Game is full'
 			}))
 			await self.close()
+		
+
+
 
 	async def assign_player_number(self):
 		if 'player1' not in self.game_state['players']:
@@ -925,6 +941,9 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.game_state['game_started'] = False
 		if self.backup_task:
 			self.backup_task.cancel()
+		
+		game_cache_key = f'game_status_{self.game_id}'
+		await cache.set(game_cache_key, False, timeout=180)  # 3분 후 자동 삭제
 		
 		# 게임 로그 저장
 		print(f"Game {self.game_id} ended. Winner: {event['winner']}", file=sys.stderr)
