@@ -58,6 +58,7 @@ INSTALLED_APPS = [
 	'rest_framework_simplejwt',
 	'game',
 	'corsheaders'
+    'contract'
 ]
 
 MIDDLEWARE = [
