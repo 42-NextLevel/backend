@@ -867,12 +867,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if disconnect_count == 2:
 			await sync_to_async(cache.set)(f'game_status_{self.game_id}', False, timeout=ROOM_TIMEOUT)
 			print(f"Game ended due to 2 players disconnecting", file=sys.stderr)
-		
-		if self.match == '0':
-			return
-		# 2. 탈주자 수에 따른 처리
-		if len(self.game_state['disconnected_player']) == 2:
+			# 2. 탈주자 수에 따른 처리
 			# 같은 게임에서 2명 탈주한 경우 final 룸 처리
+			if self.match == '0' or self.match == '3' or self.match == '4':
+				return
 			room_final = await cache.get(f'game_room_{self.game_id}_final')
 			if room_final:
 				num_disconnected = int(room_final.get('disconnected', 0))
@@ -889,31 +887,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					except Exception as e:
 						logger.error(f"Cache set error in final room: {e}")
 			self.send_to_room_socket(room_id=room_final, event='destroy')
-		else:
-			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
-			print("Handling 3rd room disconnect", file=sys.stderr)
-			room_3rd = await sync_to_async(cache.get)(f'game_room_{self.game_id}_3rd')
-			if room_3rd:
-				num_disconnected = int(room_3rd.get('disconnected', 0))
-				if num_disconnected > 0:
-					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_3rd')
-				else:
-					room_3rd['disconnected'] = num_disconnected + 1
-					try:
-						await sync_to_async(cache.set)(
-							f'game_room_{self.game_id}_3rd', 
-							room_3rd, 
-							timeout=ROOM_TIMEOUT
-						)
-					except Exception as e:
-						logger.error(f"Cache set error in 3rd room: {e}")
-			self.send_to_room_socket(room_id=room_3rd, event='destroy')
-
-			
-
-		# 3. 게임 상태 업데이트
-		await self.update_game_state()
-
+		
+		
 
 	async def receive(self, text_data):
 		try:
@@ -1061,6 +1036,31 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		await asyncio.sleep(8)
 		GameState.remove_game(self.game_id)
+
+	# 탈주자 처리
+	async def handle_deserter(self, event):
+		if self.match == '0' or self.match == '3' or self.match == '4':
+			return
+		if len(self.game_state['disconnected_player']) == 1:
+			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
+			print("Handling 3rd room disconnect", file=sys.stderr)
+			room_3rd = await sync_to_async(cache.get)(f'game_room_{self.game_id}_3rd')
+			if room_3rd:
+				num_disconnected = int(room_3rd.get('disconnected', 0))
+				if num_disconnected > 0:
+					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_3rd')
+				else:
+					room_3rd['disconnected'] = num_disconnected + 1
+					try:
+						await sync_to_async(cache.set)(
+							f'game_room_{self.game_id}_3rd', 
+							room_3rd, 
+							timeout=ROOM_TIMEOUT
+						)
+					except Exception as e:
+						logger.error(f"Cache set error in 3rd room: {e}")
+			self.send_to_room_socket(room_id=room_3rd, event='destroy')
+		
 
 	@sync_to_async
 	def save_game_log(self, winner):
@@ -1341,3 +1341,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			print("Resume game task cancelled", file=sys.stderr)
 		except Exception as e:
 			logger.error(f"Error in resume_game_after_delay: {e}")
+
+
+
+		
+
+			
+
