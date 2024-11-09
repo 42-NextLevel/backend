@@ -11,3 +11,9 @@ class ContractAddress(models.Model):
         constraints = [
             models.CheckConstraint(check=models.Q(id=1), name='singleton')
         ]
+
+    def save(self, *args, **kwargs):
+        if not self.pk and ContractAddress.objects.exists():
+            # 이미 레코드가 존재하면 저장하지 않음
+            return
+        super().save(*args, **kwargs)

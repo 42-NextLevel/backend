@@ -45,7 +45,7 @@ def compile_contracts():
 		with open(sol_file, "r") as file:
 			source = file.read()
 			
-		# 컴파일 설정
+	# 컴파일 설정
 	compiled_sol = compile_standard(
 		{
 			"language": "Solidity",
@@ -73,7 +73,4 @@ def compile_contracts():
 	with open(build_file, 'w') as f:
 		json.dump(output, f, indent=2)
 		
-	print(f"Compiled {contract_name} -> {build_file}")
-
-if __name__ == "__main__":
-	compile_contracts()
+	print(f"Compiled {contract_name} -> {build_file}", file=sys.stderr)
