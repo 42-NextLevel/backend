@@ -209,6 +209,8 @@ logger = logging.getLogger(__name__)
 
 class GameState:
 	active_games = {}
+	_game_tasks = {}  # game_id를 키로 하는 task dict
+
 	
 	@classmethod
 	def get_game(cls, game_id):
@@ -222,7 +224,10 @@ class GameState:
 				'lastProcessedInput': {'player1': 0, 'player2': 0},
 				'game_started': False,
 				'match_type': None,
-				'disconnected_player': []
+				'disconnected_player': [],
+				'is_paused': False,  # pause 상태 추가
+				'pause_start_time': None,  # pause 시작 시간
+				'game_loop_running': False 
 			}
 		return cls.active_games[game_id]
 
@@ -230,6 +235,20 @@ class GameState:
 	def remove_game(cls, game_id):
 		if game_id in cls.active_games:
 			del cls.active_games[game_id]
+
+	@classmethod
+	def set_game_task(cls, game_id, task):
+		cls._game_tasks[game_id] = task
+
+	@classmethod
+	def get_game_task(cls, game_id):
+		return cls._game_tasks.get(game_id)
+	
+	@classmethod
+	def remove_game_task(cls, game_id):
+		if game_id in cls._game_tasks:
+			del cls._game_tasks[game_id]
+
 import math
 import random
 import logging
@@ -281,7 +300,7 @@ class GamePhysics:
 		self.SCORE_ANIMATION_DURATION = 1.5
 		self.GAME_RESUME_DELAY = 0.5
 		self.MAX_DELTA_TIME = 1/60  # 최대 델타 타임을 60fps 기준으로 제한
-		self.PHYSICS_SUBSTEPS = 4    # 물리 연산 세부 단계 수
+		self.PHYSICS_SUBSTEPS = 3    # 물리 연산 세부 단계 수
 		self.BASE_SPEED = 10
 		self.MIN_SPEED = 5
 		self.MAX_SPEED = 30
@@ -631,6 +650,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.last_cache_update = time.time()
 		self.CACHE_UPDATE_INTERVAL = 0.1  # 100ms
 		self.match = None
+		self.PAUSE_DURATION = 10 # 10초
+		self.pause_task = None
+		
+
 
 	async def connect(self):
 		super().__init__()
@@ -648,6 +671,18 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.match = self.game_id.split('_')[-1]  # 항상 마지막 값이 매치 타입
 		print(f"Game ID: {self.game_id}", file=sys.stderr)
 		print(f"Match type: {self.match}", file=sys.stderr)
+
+		game_cache_key = f'game_status_{self.game_id}'
+		print(f"Game cache key: {game_cache_key}", file=sys.stderr)
+		game_status = await sync_to_async(cache.get)(game_cache_key)
+		print(f"Game status: {game_status}", file=sys.stderr)
+
+		if game_status is None:
+			pass
+		elif game_status is False:
+			print(f"WebSocket REJECT - Game in progress: {self.game_id}", file=sys.stderr)
+			await self.close()
+			return
 		
 		self.game_state = GameState.get_game(self.game_id)
 		# if self.game_state['game_started']:
@@ -655,32 +690,33 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		# 	await self.close()
 		# 	return
 		# 탈주자 인지 확인
+		is_reconnecting = False
 		if self.nickname in self.game_state['disconnected_player']:
 			print(f"Player {self.nickname} reconnecting to game", file=sys.stderr)
-			# disconnected_player 목록에서 제거
 			self.game_state['disconnected_player'].remove(self.nickname)
+			is_reconnecting = True
+
+			if not self.game_state['disconnected_player']:
+				self.game_state['is_paused'] = False
+				self.game_state['pause_start_time'] = None
+				if self.pause_task and not self.pause_task.done():
+					self.pause_task.cancel()
+					self.pause_task = None
 			
 		
-		# game_cache_key = f'game_status_{self.game_id}'
-		# game_status = await sync_to_async(cache.get)(game_cache_key)
 		
-		# if game_status is None:
-		# 	# 최초 접속인 경우
-		# 	GAME_TIMEOUT = 60 * 30  # 30분
-		# 	await cache.set(game_cache_key, True, timeout=GAME_TIMEOUT)
-		# elif game_status is True:
-		# 	# 이미 게임이 진행중인 경우
-		# 	print(f"WebSocket REJECT - Game in progress: {self.game_id}", file=sys.stderr)
-		# 	await self.close()
+		
+
 		# 	return
+		await self.channel_layer.group_add(self.game_group_name, self.channel_name)
+		await self.accept()
+
+		
 		
 		print("game_state: ", self.game_state, file=sys.stderr)
 		self.game_state['match_type'] = self.match
 
 		
-		await self.channel_layer.group_add(self.game_group_name, self.channel_name)
-		await self.accept()
-
 		self.score_handler = GameScoreHandler(
 		self.game_state,
 		self.physics,
@@ -691,6 +727,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 		self.player_number = await self.assign_player_number()
 		
+		
 		if self.player_number:
 			
 			await self.send(json.dumps({
@@ -698,8 +735,11 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				'player_number': self.player_number
 			}))
 			logger.info(f"Player {self.nickname} assigned as {self.player_number}")
-			
+			if is_reconnecting:
+				print(f"Reconnection for {self.nickname}", file=sys.stderr)
+				await self.handle_reconnection()
 			if len(self.game_state['players']) == 2:
+				print(f"Game starting for {self.nickname}", file=sys.stderr)
 				await self.start_game()
 				self.backup_task = asyncio.create_task(self.periodic_backup())
 		else:
@@ -709,8 +749,57 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				'reason': 'Game is full'
 			}))
 			await self.close()
+
+
+	async def handle_reconnection(self):
+		"""재연결 시 처리 로직"""
+		# 기존 game_loop task가 있다면 종료
+		# game_loop_task = GameState.get_game_task(self.game_id)
+		# if game_loop_task:
+		# 	game_loop_task.cancel()
+		# 	try:
+		# 		await game_loop_task
+		# 	except asyncio.CancelledError:
+		# 		pass
+			
+		# 현재 게임 상태 전송
+		await self.send_reconnection_state()
+		
+		# 게임 재시작
+		if not self.game_state['disconnected_player']:
+			self.game_state['is_paused'] = False
+			self.game_state['pause_start_time'] = None
+			if self.pause_task and not self.pause_task.done():
+				self.pause_task.cancel()
+				self.pause_task = None
+				
+			# 새로운 game_loop 시작
+			# self.game_state['game_loop_task'] = asyncio.create_task(self.game_loop())
+			# print(f"Game resumed after reconnection countdown for {self.nickname}", file=sys.stderr)
+
+
 		
 
+	async def send_reconnection_state(self):
+		"""재연결된 클라이언트에게 현재 게임 상태 전송"""
+		# 클라이언트가 기대하는 형식으로 데이터 변환
+		current_state = {
+			'type': 'initial_game_state',
+			'ball': self.game_state['ball'],
+			'paddle': {
+				'players': {
+					'player1': self.game_state['players'].get('player1', {'position': {'x': 0, 'z': 7}}),
+					'player2': self.game_state['players'].get('player2', {'position': {'x': 0, 'z': -7}})
+				},
+				'lastProcessedInput': self.game_state['lastProcessedInput']
+			},
+			'score': self.game_state['score'],
+			'game_started': self.game_state['game_started'],
+			'timestamp': int(time.time() * 1000)
+		}
+		
+		print(f"Sending reconnection state: {current_state}", file=sys.stderr)
+		await self.send(json.dumps(current_state))
 
 
 	async def assign_player_number(self):
@@ -727,23 +816,27 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def disconnect(self, close_code):
 		# 남은 플레이어에게 승리 메시지 전송
-		print(f"Player {self.nickname} disconnected", file=sys.stderr)
-		# if self.score_handler.game_end == False:
+		game_loop_task = GameState.get_game_task(self.game_id)
+		if game_loop_task:
+			game_loop_task.cancel()
+			try:
+				await game_loop_task
+			except asyncio.CancelledError:
+				pass
+			GameState.remove_game_task(self.game_id)
 
-		# 	if self.player_number == 'player1':
-		# 		winner = 'player2'
-		# 	else:
-		# 		winner = 'player1'
-		# 	await self.channel_layer.group_send(
-		# 		self.game_group_name,
-		# 		{
-		# 			'type': 'game_end',
-		# 			'winner': winner,
-		# 			'match': self.match
-		# 		}
-		# 	)
 			
-		self.handle_room_disconnect()
+		print(f"Player {self.nickname} disconnected", file=sys.stderr)
+		if self.game_state and self.game_state.get('game_started', False):
+			# 게임 pause 상태 설정
+			self.game_state['is_paused'] = True
+			self.game_state['pause_start_time'] = time.time()
+			print(f"Game paused for 30 seconds due to {self.nickname} disconnect", file=sys.stderr)
+			if self.pause_task and not self.pause_task.done():
+				self.pause_task.cancel()
+			self.pause_task = asyncio.create_task(self.resume_game_after_delay())
+			
+		await self.handle_room_disconnect()
 
 			
 		# 게임 종료 처리
@@ -768,19 +861,25 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	async def handle_room_disconnect(self):
 		# 1. 플레이어 탈주 기록 추가
 		self.game_state['disconnected_player'].append(self.nickname)
-		
-		# 2. 탈주자 수에 따른 처리
-		if len(self.game_state['disconnected_player']) == 2:
+		disconnect_count = len(self.game_state['disconnected_player'])
+		print(f"Disconnected players: {self.game_state['disconnected_player']}", file=sys.stderr)
+		print(f"Disconnect count: {disconnect_count}", file=sys.stderr)
+		if disconnect_count == 2:
+			await sync_to_async(cache.set)(f'game_status_{self.game_id}', False, timeout=ROOM_TIMEOUT)
+			print(f"Game ended due to 2 players disconnecting", file=sys.stderr)
+			# 2. 탈주자 수에 따른 처리
 			# 같은 게임에서 2명 탈주한 경우 final 룸 처리
+			if self.match == '0' or self.match == '3' or self.match == '4':
+				return
 			room_final = await cache.get(f'game_room_{self.game_id}_final')
 			if room_final:
 				num_disconnected = int(room_final.get('disconnected', 0))
 				if num_disconnected > 0:
-					await cache.delete(f'game_room_{self.game_id}_final')
+					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_final')
 				else:
 					room_final['disconnected'] = num_disconnected + 1
 					try:
-						await cache.set(
+						await sync_to_async(cache.set)(
 							f'game_room_{self.game_id}_final', 
 							room_final, 
 							timeout=ROOM_TIMEOUT
@@ -788,31 +887,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					except Exception as e:
 						logger.error(f"Cache set error in final room: {e}")
 			self.send_to_room_socket(room_id=room_final, event='destroy')
-		else:
-			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
-			print("Handling 3rd room disconnect", file=sys.stderr)
-			room_3rd = await cache.get(f'game_room_{self.game_id}_3rd')
-			if room_3rd:
-				num_disconnected = int(room_3rd.get('disconnected', 0))
-				if num_disconnected > 0:
-					await cache.delete(f'game_room_{self.game_id}_3rd')
-				else:
-					room_3rd['disconnected'] = num_disconnected + 1
-					try:
-						await cache.set(
-							f'game_room_{self.game_id}_3rd', 
-							room_3rd, 
-							timeout=ROOM_TIMEOUT
-						)
-					except Exception as e:
-						logger.error(f"Cache set error in 3rd room: {e}")
-			self.send_to_room_socket(room_id=room_3rd, event='destroy')
-
-			
-
-		# 3. 게임 상태 업데이트
-		await self.update_game_state()
-
+		
+		
 
 	async def receive(self, text_data):
 		try:
@@ -849,8 +925,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		)
 		
 		
-		logger.info(f"Game {self.game_id} started")
-		asyncio.create_task(self.game_loop())
+		game_loop_task = asyncio.create_task(self.game_loop())
+		GameState.set_game_task(self.game_id, game_loop_task)
 	async def countdown(self, event):
 		print(f"Sending countdown event: {event}", file=sys.stderr)  # 디버그 로그
 		
@@ -898,11 +974,12 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 		self.physics.game_started = True
 		while self.game_state['game_started']:
-			current_time = time.time()
-			
-			if current_time - self.last_update_time >= self.update_interval:
-				await self.update_game_state()
-				self.last_update_time = current_time
+			if not self.game_state['is_paused']:  # 공유 상태로 체크
+				current_time = time.time()
+				
+				if current_time - self.last_update_time >= self.update_interval:
+					await self.update_game_state()
+					self.last_update_time = current_time
 			
 			await asyncio.sleep(self.UPDATE_RATE/2)
 
@@ -948,6 +1025,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		game_cache_key = f'game_status_{self.game_id}'
 		await sync_to_async(cache.set)(game_cache_key, False, timeout=180)
+		print(f"Game {self.game_id} ended. Winner: {event['winner']}", file=sys.stderr)
 
 		
 		# 게임 로그 저장
@@ -958,6 +1036,31 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		await asyncio.sleep(8)
 		GameState.remove_game(self.game_id)
+
+	# 탈주자 처리
+	async def handle_deserter(self, event):
+		if self.match == '0' or self.match == '3' or self.match == '4':
+			return
+		if len(self.game_state['disconnected_player']) == 1:
+			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
+			print("Handling 3rd room disconnect", file=sys.stderr)
+			room_3rd = await sync_to_async(cache.get)(f'game_room_{self.game_id}_3rd')
+			if room_3rd:
+				num_disconnected = int(room_3rd.get('disconnected', 0))
+				if num_disconnected > 0:
+					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_3rd')
+				else:
+					room_3rd['disconnected'] = num_disconnected + 1
+					try:
+						await sync_to_async(cache.set)(
+							f'game_room_{self.game_id}_3rd', 
+							room_3rd, 
+							timeout=ROOM_TIMEOUT
+						)
+					except Exception as e:
+						logger.error(f"Cache set error in 3rd room: {e}")
+			self.send_to_room_socket(room_id=room_3rd, event='destroy')
+		
 
 	@sync_to_async
 	def save_game_log(self, winner):
@@ -1185,10 +1288,63 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				await asyncio.sleep(60)  # 오류 발생시 1분 후 재시도
 	
 	async def send_to_room_socket(self, room_id, event_type, data):
-		room_group_name = f'room_{room_id}'
-		await self.channel_layer.group_send(
-			room_group_name,
-			{
-				'type': event_type
-			}
-		)
+		"""
+		룸 소켓으로 메시지 전송
+		
+		Args:
+			room_id (str): 대상 룸 ID
+			event_type (str): 이벤트 타입
+			data (dict): 전송할 데이터
+		"""
+		try:
+			print(f"Sending {event_type} event to room {room_id}", file=sys.stderr)
+			room_group_name = f'room_{room_id}'
+			await self.channel_layer.group_send(
+				room_group_name,
+				{
+					'type': event_type,
+					**data
+				}
+			)
+		except Exception as e:
+			logger.error(f"Error sending to room socket: {e}")
+
+
+	async def resume_game_after_delay(self):
+		"""30초 후 게임 상태 확인 및 처리"""
+		try:
+			await asyncio.sleep(self.PAUSE_DURATION)
+			
+			if self.game_state['is_paused']:  # 여전히 pause 상태인 경우
+				if len(self.game_state['disconnected_player']) == 1:
+					disconnected_nickname = self.game_state['disconnected_player'][0]
+					
+					# disconnected_nickname이 현재 플레이어가 아니면 현재 플레이어가 승자
+					winner = self.player_number if disconnected_nickname != self.nickname else ('player2' if self.player_number == 'player1' else 'player1')
+					
+					print(f"Game ended due to timeout. {disconnected_nickname} disconnected. Winner: {winner}", file=sys.stderr)
+					
+					await self.channel_layer.group_send(
+						self.game_group_name,
+						{
+							'type': 'game_end',
+							'winner': winner,
+							'match': self.match
+						}
+					)
+				else:
+					# 모든 플레이어가 재연결된 상태라면 게임 재개
+					self.game_state['is_paused'] = False
+					self.game_state['pause_start_time'] = None
+			
+		except asyncio.CancelledError:
+			print("Resume game task cancelled", file=sys.stderr)
+		except Exception as e:
+			logger.error(f"Error in resume_game_after_delay: {e}")
+
+
+
+		
+
+			
+
