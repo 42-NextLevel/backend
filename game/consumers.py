@@ -287,8 +287,8 @@ class GamePhysics:
 		self.TUNNEL_LENGTH = 42
 		
 		# 패들 위치
-		self.PADDLE_Z_PLAYER1 = -2  # Player 1 패들의 z 위치 (0에 가깝게)
-		self.PADDLE_Z_PLAYER2 = -40  # Player 2 패들의 z 위치 (-42에 가깝게)
+		self.PADDLE_Z_PLAYER1 = -1  # Player 1 패들의 z 위치 (0에 가깝게)
+		self.PADDLE_Z_PLAYER2 = -41  # Player 2 패들의 z 위치 (-42에 가깝게)
 
 		# 공 상수
 		self.BALL_SCALE = 1.5
@@ -384,10 +384,10 @@ class GamePhysics:
 		ball['scale'] = self.calculate_ball_scale(next_z)
 		
 		# 1. 득점 체크
-		if next_z <= -self.TUNNEL_LENGTH:
+		if next_z <= -self.TUNNEL_LENGTH - 1:
 			ball['position'].update({'x': next_x, 'y': next_y, 'z': next_z})
 			return 'player1'
-		elif next_z >= 0:
+		elif next_z >= 1:
 			ball['position'].update({'x': next_x, 'y': next_y, 'z': next_z})
 			return 'player2'
 
