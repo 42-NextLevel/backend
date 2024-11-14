@@ -300,7 +300,7 @@ class GamePhysics:
 		self.BASE_HIT_THRESHOLD = 1.0
 		self.MAX_BALL_SCALE = 2.0
 
-		self.HIT_ZONE_DEPTH = 1.0
+		self.HIT_ZONE_DEPTH = 0.5
 		
 		# Player 1의 히트존 (0쪽)
 		self.PLAYER1_HIT_ZONE_START = self.PADDLE_Z_PLAYER1 + self.HIT_ZONE_DEPTH
@@ -311,13 +311,13 @@ class GamePhysics:
 		self.PLAYER2_HIT_ZONE_END = self.PADDLE_Z_PLAYER2 - self.HIT_ZONE_DEPTH
 
 		# 속도 관련 상수
-		self.BALL_SPEED = 8
-		self.BALL_SPEED_FACTOR = 3
+		self.BALL_SPEED = 10
+		self.BALL_SPEED_FACTOR = 4
 		self.MIN_SPEED = 3
-		self.MAX_SPEED = self.BALL_SPEED * 1.5  # 최대 속도 제한
+		self.MAX_SPEED = self.BALL_SPEED * 2.0  # 최대 속도 제한
 
 		# 충돌 관련 상수
-		self.COLLISION_ANGLE_FACTOR = 0.8  # 충돌 각도 영향력
+		self.COLLISION_ANGLE_FACTOR = 1.0  # 충돌 각도 영향력
 		self.COLLISION_SPEED_INCREASE = 1.05  # 충돌 후 속도 증가 비율
 
 		# 물리 연산 설정
@@ -361,10 +361,21 @@ class GamePhysics:
 		}
 	
 	def calculate_ball_scale(self, z_position):
-		# z 위치를 0~1 사이 값으로 정규화
-		progress = (self.TUNNEL_LENGTH + z_position) / self.TUNNEL_LENGTH
-	# 크기를 보간
+		# 터널 중앙점 계산 (예: -42 ~ 0 범위에서는 -21이 중앙)
+		tunnel_center = -self.TUNNEL_LENGTH / 2
+		
+		# 중앙으로부터의 거리 계산 (절대값)
+		distance_from_center = abs(z_position - tunnel_center)
+		
+		# 거리를 0~1 사이 값으로 정규화 (중앙이 0, 양 끝이 1)
+		normalized_distance = distance_from_center / (self.TUNNEL_LENGTH / 2)
+		
+		# normalized_distance를 그대로 사용하면 중앙이 작고 양 끝이 큼
+		progress = normalized_distance
+		
 		return self.INITIAL_BALL_SCALE + (self.MAX_BALL_SCALE - self.INITIAL_BALL_SCALE) * progress
+
+
 
 	def calculate_hit_threshold(self, z_position):
 		"""공의 z 위치에 따른 히트박스 크기 계산"""
