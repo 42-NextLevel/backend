@@ -1005,35 +1005,42 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	
 	async def save_blockchain_data(self, players):
-		from contract.solidity.scripts.Web3Client import Web3Client  # 정확한 경로로 수정
+		from contract.solidity.scripts.Web3Client import Web3Client
+		from asgiref.sync import sync_to_async
 		
 		try:
+			# 환경 변수 확인
+			if not os.environ.get('ETHEREUM_PRIVATE_KEY') or not os.environ.get('WEB3_PROVIDER_URL'):
+				print("Missing required environment variables", file=sys.stderr)
+				return None
+
+			# GameLog.objects.latest('id') 호출을 sync_to_async로 래핑
+			get_latest_id = sync_to_async(lambda: GameLog.objects.latest('id').id)
+			game_id = await get_latest_id()
+
 			client = Web3Client()
-			
-			# 현재 시간을 적절한 형식으로 포맷팅
 			start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 			
 			match_info = client.make_match_struct(
-				start_time=start_time,  # 포맷팅된 시간 문자열
-				match_type=int(self.game_state['match_type']),  # int로 확실하게 변환
-				user1=players[0]['intraId'],
-				user2=players[1]['intraId'],
-				nick1=players[0]['nickname'],
-				nick2=players[1]['nickname'],
-				score1=self.game_state['score']['player1'],
-				score2=self.game_state['score']['player2']
+				start_time=start_time,
+				match_type=int(self.match),
+				user1=str(players[0]['intraId']),
+				user2=str(players[1]['intraId']),
+				nick1=str(players[0]['nickname']),
+				nick2=str(players[1]['nickname']),
+				score1=int(self.game_state['score']['player1']),
+				score2=int(self.game_state['score']['player2'])
 			)
-			# 마지막으로 생성된 게임 ID 가져오기 auto increment
-			game_id = int(GameLog.objects.latest('id').id)
+
 			tx_hash = await client.add_match_history(game_id, match_info)
-			print(f"Transaction hash: {tx_hash}", file=sys.stderr)
+			print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
 			return tx_hash
-			
+
 		except Exception as e:
 			print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
 			import traceback
 			traceback.print_exc(file=sys.stderr)
-			raise e
+			return None
 
 	@sync_to_async
 	def create_game_log(self, start_time, match_type):
