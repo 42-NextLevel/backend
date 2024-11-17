@@ -1,0 +1,261 @@
+{
+  "abi": [
+    {
+      "inputs": [],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "oldAdmin",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newAdmin",
+          "type": "address"
+        }
+      ],
+      "name": "AdminChanged",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint32",
+          "name": "gameId",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint32",
+          "name": "startTime",
+          "type": "uint32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes16",
+          "name": "user1",
+          "type": "bytes16"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes16",
+          "name": "user2",
+          "type": "bytes16"
+        }
+      ],
+      "name": "HistoryAdded",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint16",
+          "name": "gameId",
+          "type": "uint16"
+        },
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "startTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint8",
+              "name": "matchType",
+              "type": "uint8"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "user1",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "user2",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "nick1",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "nick2",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "uint8",
+              "name": "score1",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "score2",
+              "type": "uint8"
+            }
+          ],
+          "internalType": "struct PongHistory.MatchInfo",
+          "name": "info",
+          "type": "tuple"
+        }
+      ],
+      "name": "addHistory",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "admin",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newAdmin",
+          "type": "address"
+        }
+      ],
+      "name": "changeAdmin",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint16",
+          "name": "gameId",
+          "type": "uint16"
+        }
+      ],
+      "name": "getHistory",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "uint256",
+              "name": "startTime",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint8",
+              "name": "matchType",
+              "type": "uint8"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "user1",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "user2",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "nick1",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "bytes16",
+              "name": "nick2",
+              "type": "bytes16"
+            },
+            {
+              "internalType": "uint8",
+              "name": "score1",
+              "type": "uint8"
+            },
+            {
+              "internalType": "uint8",
+              "name": "score2",
+              "type": "uint8"
+            }
+          ],
+          "internalType": "struct PongHistory.MatchInfo",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint16",
+          "name": "gameId",
+          "type": "uint16"
+        }
+      ],
+      "name": "table",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "startTime",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint8",
+          "name": "matchType",
+          "type": "uint8"
+        },
+        {
+          "internalType": "bytes16",
+          "name": "user1",
+          "type": "bytes16"
+        },
+        {
+          "internalType": "bytes16",
+          "name": "user2",
+          "type": "bytes16"
+        },
+        {
+          "internalType": "bytes16",
+          "name": "nick1",
+          "type": "bytes16"
+        },
+        {
+          "internalType": "bytes16",
+          "name": "nick2",
+          "type": "bytes16"
+        },
+        {
+          "internalType": "uint8",
+          "name": "score1",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint8",
+          "name": "score2",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "6080604052348015600e575f80fd5b505f80546001600160a01b031916331790556107d78061002d5f395ff3fe608060405234801561000f575f80fd5b5060043610610055575f3560e01c806324d2e27b146100595780638f28397014610159578063b1cfe5031461016e578063cc0480ea14610226578063f851a44014610239575b5f80fd5b61014361006736600461059c565b60408051610100810182525f80825260208201819052918101829052606081018290526080810182905260a0810182905260c0810182905260e08101919091525061ffff165f9081526001602081815260409283902083516101008082018652825482529382015460ff808216948301949094526001600160801b0319949004608090811b851695820195909552600282015480861b85166060830152600160801b90819004861b8516868301526003909201549485901b90931660a08401528304811660c0830152600160881b90920490911660e082015290565b60405161015091906105bc565b60405180910390f35b61016c610167366004610665565b610263565b005b6101d661017c36600461059c565b600160208190525f9182526040909120805491810154600282015460039092015460ff80831693610100909304608090811b9380821b93600160801b91829004831b939281901b92918104821691600160881b9091041688565b6040805198895260ff97881660208a01526001600160801b0319968716908901529385166060880152918416608087015290921660a085015290821660c08401521660e082015261010001610150565b61016c6102343660046106b2565b6103d9565b5f5461024b906001600160a01b031681565b6040516001600160a01b039091168152602001610150565b5f546001600160a01b031633146102c15760405162461bcd60e51b815260206004820152601a60248201527f4f6e6c792061646d696e2063616e2061646420686973746f727900000000000060448201526064015b60405180910390fd5b6001600160a01b0381166103095760405162461bcd60e51b815260206004820152600f60248201526e496e76616c6964206164647265737360881b60448201526064016102b8565b5f546001600160a01b03908116908216036103805760405162461bcd60e51b815260206004820152603160248201527f4e65772061646d696e2063616e6e6f74206265207468652073616d65206173206044820152703a34329031bab93932b73a1030b236b4b760791b60648201526084016102b8565b5f80546040516001600160a01b03808516939216917f7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f91a35f80546001600160a01b0319166001600160a01b0392909216919091179055565b5f546001600160a01b031633146104325760405162461bcd60e51b815260206004820152601a60248201527f4f6e6c792061646d696e2063616e2061646420686973746f727900000000000060448201526064016102b8565b80516104755760405162461bcd60e51b8152602060048201526012602482015271496e76616c69642073746172742074696d6560701b60448201526064016102b8565b80514210156104d15760405162461bcd60e51b815260206004820152602260248201527f53746172742074696d652063616e6e6f7420626520696e207468652066757475604482015261726560f01b60648201526084016102b8565b61ffff9091165f908152600160208181526040928390208451815590840151918101805493850151608090811c6101000270ffffffffffffffffffffffffffffffffff1995861660ff9586161717909155606085015181860151821c600160801b90810291831c91909117600284015560a08601516003909301805460c088015160e0909801518616600160881b0260ff60881b1998909616909202919095169290911c919091171792909216919091179055565b803561ffff81168114610597575f80fd5b919050565b5f602082840312156105ac575f80fd5b6105b582610586565b9392505050565b5f610100820190508251825260ff60208401511660208301526001600160801b031960408401511660408301526001600160801b03196060840151166060830152608083015161061860808401826001600160801b0319169052565b5060a083015161063460a08401826001600160801b0319169052565b5060c083015161064960c084018260ff169052565b5060e083015161065e60e084018260ff169052565b5092915050565b5f60208284031215610675575f80fd5b81356001600160a01b03811681146105b5575f80fd5b803560ff81168114610597575f80fd5b80356001600160801b031981168114610597575f80fd5b5f808284036101208112156106c5575f80fd5b6106ce84610586565b9250610100601f19820112156106e2575f80fd5b50604051610100810181811067ffffffffffffffff8211171561071357634e487b7160e01b5f52604160045260245ffd5b60409081526020850135825261072a90850161068b565b602082015261073b6060850161069b565b604082015261074c6080850161069b565b606082015261075d60a0850161069b565b608082015261076e60c0850161069b565b60a082015261077f60e0850161068b565b60c0820152610791610100850161068b565b60e082015280915050925092905056fea264697066735822122028695673a7a0a5df919bf3057f4788095f59417fcffd27ca2b8f9f2e5498d98b64736f6c634300081a0033"
+}
