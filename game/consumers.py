@@ -1085,7 +1085,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		
 
-	@sync_to_async
 	async def save_game_log(self, winner):
 		
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
