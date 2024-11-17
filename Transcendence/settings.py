@@ -57,11 +57,10 @@ INSTALLED_APPS = [
 	'rest_framework',
 	'rest_framework_simplejwt',
 	'game',
-	'corsheaders'
+    'contract'
 ]
 
 MIDDLEWARE = [
-	'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

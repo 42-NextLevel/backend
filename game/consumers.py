@@ -287,6 +287,7 @@ class GamePhysics:
 		self.TUNNEL_LENGTH = 42
 		
 		# 패들 위치
+
 		self.PADDLE_Z_PLAYER1 = -1  # Player 1 패들의 z 위치 (0에 가깝게)
 		self.PADDLE_Z_PLAYER2 = -41  # Player 2 패들의 z 위치 (-42에 가깝게)
 
@@ -299,6 +300,7 @@ class GamePhysics:
 		self.HIT_THRESHOLD = 1.0  # 고정된 히트박스 크기
 		self.BASE_HIT_THRESHOLD = 1.0
 		self.MAX_BALL_SCALE = 2.0
+
 
 		self.HIT_ZONE_DEPTH = 0.5
 		
@@ -494,7 +496,6 @@ class GamePhysics:
 
 class GameScoreHandler:
 	def __init__(self, game_state, physics, channel_layer, game_group_name):
-		"""초기화"""
 		self.game_state = game_state
 		self.physics = physics
 		self.channel_layer = channel_layer
@@ -1003,24 +1004,83 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 
 	@sync_to_async
-	def save_game_log(self, winner):
+	def save_blockchain_data(self, players):
+		from contract.solidity.scripts.Web3Client import Web3Client  # 정확한 경로로 수정
+		
+		try:
+			client = Web3Client()
+			
+			# 현재 시간을 적절한 형식으로 포맷팅
+			start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+			
+			match_info = client.make_match_struct(
+				start_time=start_time,  # 포맷팅된 시간 문자열
+				match_type=int(self.game_state['match_type']),  # int로 확실하게 변환
+				user1=players[0]['intraId'],
+				user2=players[1]['intraId'],
+				nick1=players[0]['nickname'],
+				nick2=players[1]['nickname'],
+				score1=self.game_state['score']['player1'],
+				score2=self.game_state['score']['player2']
+			)
+			# 마지막으로 생성된 게임 ID 가져오기 auto increment
+			game_id = int(GameLog.objects.latest('id').id)
+			tx_hash = client.add_match_history(game_id, match_info)
+			print(f"Transaction hash: {tx_hash}", file=sys.stderr)
+			return tx_hash
+			
+		except Exception as e:
+			print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
+			import traceback
+			traceback.print_exc(file=sys.stderr)
+			raise e
+
+	@sync_to_async
+	def create_game_log(self, start_time, match_type):
+		return GameLog.objects.create(
+			start_time=start_time,
+			match_type=match_type,
+			address=None
+		)
+
+	@sync_to_async
+	def create_user_game_log(self, user_id, game_log_id, nickname, score):
+		return UserGameLog.objects.create(
+			user_id=user_id,
+			game_log_id=game_log_id,
+			nickname=nickname,
+			score=score
+		)
+
+	@sync_to_async
+	def get_user_by_intra_id(self, intra_id):
+		return User.get_by_intra_id(intra_id)
+
+	@sync_to_async
+	def handle_cache_operations(self, room_id, room, room_type):
+		if room_type == 1 or room_type == 2:
+			room[f'game{room_type}_ended'] = True
+			if room.get('game1_ended', False) and room.get('game2_ended', False):
+				cache.delete(f'game_room_{room_id}')
+			cache.set(f'game_room_{room_id}', room)
+		else:
+			cache.delete(f'game_room_{room_id}')
+
+	async def save_game_log(self, winner):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
 		
-		# Game ID에서 room_id와 match 정보 파싱
 		room_id = '_'.join(self.game_id.split('_')[:-1])
 		print(f"Room ID: {room_id}", file=sys.stderr)
-		room = cache.get(f'game_room_{room_id}')
+		
+		room = await sync_to_async(cache.get)(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
 			return
 		
-		# roomType에 따른 플레이어 정보 가져오기
 		room_type = int(self.match)
 		
-		# room[f'game{room_type}_ended'] = True 인경우 같이 게임한 유저는 나가야함
 		if room_type in [1, 2] and room.get(f'game{room_type}_ended', False):
 			return
-		
 		
 		try:
 			# started_at 처리
@@ -1032,61 +1092,43 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				start_time = datetime.now()
 			
 			# GameLog 생성
-			game_log = GameLog.objects.create(
-				start_time=start_time,
-				match_type=int(self.match),
-				address=None
-			)
+			game_log = await self.create_game_log(start_time, int(self.match))
 
-			
-			print(f"Room type: {room_type}", file=sys.stderr)
-			if room_type == 0:  # 일반 게임
+			# 플레이어 정보 가져오기
+			if room_type == 0:
 				players = room['players']
-			elif room_type == 1:  # 토너먼트 첫 번째 게임
+			elif room_type == 1:
 				players = room['game1']
 				print("game1 players:", players, file=sys.stderr)
-			elif room_type == 2:  # 토너먼트 두 번째 게임
+			elif room_type == 2:
 				players = room['game2']
 				print("game2 players:", players, file=sys.stderr)
-			elif room_type == 3:  # 결승전
-				players = room['players']
-			elif room_type == 4:  # 3,4위전
-				players = room['players']
 			else:
 				players = room['players']
-				
+			
 			# 플레이어 로그 저장
 			for i, player_data in enumerate(players, 1):
 				player_number = f'player{i}'
-				user = User.get_by_intra_id(player_data['intraId'])
+				user = await self.get_user_by_intra_id(player_data['intraId'])
 				print(f"Player {player_number}: {player_data['nickname']}, {player_data['intraId']}", file=sys.stderr)
+				
 				if user:
 					score = self.game_state['score'].get(player_number, 0)
-					UserGameLog.objects.create(
-						user_id=user.id,
-						game_log_id=game_log.id,
-						nickname=player_data['nickname'],
-						score=score
+					await self.create_user_game_log(
+						user.id,
+						game_log.id,
+						player_data['nickname'],
+						score
 					)
 				else:
 					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
 			
+			# 블록체인 저장
+			await self.save_blockchain_data(players)
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
-			# room 삭제 조건
-			# 토너먼트 조심
-			if room_type == 1 or room_type == 2:
-				# 토너먼트 게임 중간일 경우
-				room[f'game{room_type}_ended'] = True
-				if room.get('game1_ended', False) and room.get('game2_ended', False):
-					cache.delete(f'game_room_{room_id}')
-				# room set
-				cache.set(f'game_room_{room_id}', room)
-			else:
-				cache.delete(f'game_room_{room_id}')
-				# 토너먼트 게임일 경우
-				# 두 게임 모두 종료되면 room 삭제
-					
+			# 캐시 처리
+			await self.handle_cache_operations(room_id, room, room_type)
 				
 		except Exception as e:
 			print(f"Error saving game log: {str(e)}", file=sys.stderr)
@@ -1240,10 +1282,3 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			print("Resume game task cancelled", file=sys.stderr)
 		except Exception as e:
 			logger.error(f"Error in resume_game_after_delay: {e}")
-
-
-
-		
-
-			
-
