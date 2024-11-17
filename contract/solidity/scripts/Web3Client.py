@@ -27,8 +27,7 @@ class Web3Client:
 		self.contract_address = os.environ.get("CONTRACT_ADDRESS")
 		if not self.contract_address:
 			self.contract_address = self._deploy_contract()
-			with open('.env', 'a') as f:
-				f.write(f'\nCONTRACT_ADDRESS="{self.contract_address}"')
+			os.environ["CONTRACT_ADDRESS"] = self.contract_address
 
 	def _load_contract_artifacts(self):
 		"""컨트랙트 ABI와 바이트코드 로딩"""
