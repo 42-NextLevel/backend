@@ -986,45 +986,81 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 
 	@sync_to_async
-	def save_blockChain(self, players):  # async 제거
-		from contract.solidity.scripts import Web3Client
-		client = Web3Client()
-		match_info = client.make_match_struct(
-			start_time=self.game_state['start_time'],
-			mathch_type=self.game_state['match_type'],
-			user1=players[0]['intraId'],
-			user2=players[1]['intraId'],
-			nick1=players[0]['nickname'],
-			nick2=players[1]['nickname'],
-			score1=self.game_state['score']['player1'],
-			score2=self.game_state['score']['player2']
+	def save_blockchain_data(self, players):
+		from contract.solidity.scripts.Web3Client import Web3Client  # 정확한 경로로 수정
+		
+		try:
+			client = Web3Client()
+			
+			# 현재 시간을 적절한 형식으로 포맷팅
+			start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+			
+			match_info = client.make_match_struct(
+				start_time=start_time,  # 포맷팅된 시간 문자열
+				match_type=int(self.game_state['match_type']),  # int로 확실하게 변환
+				user1=players[0]['intraId'],
+				user2=players[1]['intraId'],
+				nick1=players[0]['nickname'],
+				nick2=players[1]['nickname'],
+				score1=self.game_state['score']['player1'],
+				score2=self.game_state['score']['player2']
+			)
+			# 마지막으로 생성된 게임 ID 가져오기 auto increment
+			game_id = int(GameLog.objects.latest('id').id)
+			tx_hash = client.add_match_history(game_id, match_info)
+			print(f"Transaction hash: {tx_hash}", file=sys.stderr)
+			return tx_hash
+			
+		except Exception as e:
+			print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
+			import traceback
+			traceback.print_exc(file=sys.stderr)
+			raise e
+
+	@sync_to_async
+	def create_game_log(self, start_time, match_type):
+		return GameLog.objects.create(
+			start_time=start_time,
+			match_type=match_type,
+			address=None
 		)
 
-		game_id = self.game_id
-		tx_hash = client.add_match_history(game_id, match_info)
-		print(f"Transaction hash: {tx_hash}", file=sys.stderr)
+	@sync_to_async
+	def create_user_game_log(self, user_id, game_log_id, nickname, score):
+		return UserGameLog.objects.create(
+			user_id=user_id,
+			game_log_id=game_log_id,
+			nickname=nickname,
+			score=score
+		)
 
-		
+	@sync_to_async
+	def get_user_by_intra_id(self, intra_id):
+		return User.get_by_intra_id(intra_id)
 
-		
-		
+	@sync_to_async
+	def handle_cache_operations(self, room_id, room, room_type):
+		if room_type == 1 or room_type == 2:
+			room[f'game{room_type}_ended'] = True
+			if room.get('game1_ended', False) and room.get('game2_ended', False):
+				cache.delete(f'game_room_{room_id}')
+			cache.set(f'game_room_{room_id}', room)
+		else:
+			cache.delete(f'game_room_{room_id}')
 
 	async def save_game_log(self, winner):
-		
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
 		
-		# Game ID에서 room_id와 match 정보 파싱
 		room_id = '_'.join(self.game_id.split('_')[:-1])
 		print(f"Room ID: {room_id}", file=sys.stderr)
-		room = cache.get(f'game_room_{room_id}')
+		
+		room = await sync_to_async(cache.get)(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
 			return
 		
-		# roomType에 따른 플레이어 정보 가져오기
 		room_type = int(self.match)
 		
-		# room[f'game{room_type}_ended'] = True 인경우 같이 게임한 유저는 나가야함
 		if room_type in [1, 2] and room.get(f'game{room_type}_ended', False):
 			return
 		
@@ -1038,63 +1074,43 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				start_time = datetime.now()
 			
 			# GameLog 생성
-			game_log = GameLog.objects.create(
-				start_time=start_time,
-				match_type=int(self.match),
-				address=None
-			)
+			game_log = await self.create_game_log(start_time, int(self.match))
 
-			
-			print(f"Room type: {room_type}", file=sys.stderr)
-			if room_type == 0:  # 일반 게임
+			# 플레이어 정보 가져오기
+			if room_type == 0:
 				players = room['players']
-			elif room_type == 1:  # 토너먼트 첫 번째 게임
+			elif room_type == 1:
 				players = room['game1']
 				print("game1 players:", players, file=sys.stderr)
-			elif room_type == 2:  # 토너먼트 두 번째 게임
+			elif room_type == 2:
 				players = room['game2']
 				print("game2 players:", players, file=sys.stderr)
-			elif room_type == 3:  # 결승전
-				players = room['players']
-			elif room_type == 4:  # 3,4위전
-				players = room['players']
 			else:
 				players = room['players']
-				
+			
 			# 플레이어 로그 저장
 			for i, player_data in enumerate(players, 1):
 				player_number = f'player{i}'
-				user = User.get_by_intra_id(player_data['intraId'])
+				user = await self.get_user_by_intra_id(player_data['intraId'])
 				print(f"Player {player_number}: {player_data['nickname']}, {player_data['intraId']}", file=sys.stderr)
+				
 				if user:
 					score = self.game_state['score'].get(player_number, 0)
-					UserGameLog.objects.create(
-						user_id=user.id,
-						game_log_id=game_log.id,
-						nickname=player_data['nickname'],
-						score=score
+					await self.create_user_game_log(
+						user.id,
+						game_log.id,
+						player_data['nickname'],
+						score
 					)
 				else:
 					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
 			
 			# 블록체인 저장
-			await self.save_blockChain(players)
+			await self.save_blockchain_data(players)
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
-			# room 삭제 조건
-			# 토너먼트 조심
-			if room_type == 1 or room_type == 2:
-				# 토너먼트 게임 중간일 경우
-				room[f'game{room_type}_ended'] = True
-				if room.get('game1_ended', False) and room.get('game2_ended', False):
-					cache.delete(f'game_room_{room_id}')
-				# room set
-				cache.set(f'game_room_{room_id}', room)
-			else:
-				cache.delete(f'game_room_{room_id}')
-				# 토너먼트 게임일 경우
-				# 두 게임 모두 종료되면 room 삭제
-			
+			# 캐시 처리
+			await self.handle_cache_operations(room_id, room, room_type)
 				
 		except Exception as e:
 			print(f"Error saving game log: {str(e)}", file=sys.stderr)
@@ -1255,3 +1271,46 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 			
 
+""" raceback (most recent call last):
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/threading.py", line 1075, in bootstrapinner
+2024-11-17 17:48:01     self.run()
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/threading.py", line 1012, in run
+2024-11-17 17:48:01     self._target(self._args, **self._kwargs)
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/site-packages/django/utils/autoreload.py", line 64, in wrapper
+2024-11-17 17:48:01     fn(args, kwargs)
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/site-packages/daphne/management/commands/runserver.py", line 128, in inner_run
+2024-11-17 17:48:01     application=self.get_application(options),
+2024-11-17 17:48:01                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/site-packages/daphne/management/commands/runserver.py", line 153, in get_application
+2024-11-17 17:48:01     return ASGIStaticFilesHandler(get_default_application())
+2024-11-17 17:48:01                                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/site-packages/daphne/management/commands/runserver.py", line 29, in get_default_application
+2024-11-17 17:48:01     module = importlib.import_module(path)
+2024-11-17 17:48:01              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/importlib/init.py", line 90, in import_module
+2024-11-17 17:48:01     return bootstrap.gcd_import(name[level:], package, level)
+2024-11-17 17:48:01            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2024-11-17 17:48:01   File "<frozen importlib._bootstrap>", line 1387, in gcdimport
+2024-11-17 17:48:01   File "<frozen importlib._bootstrap>", line 1360, in findand_load
+2024-11-17 17:48:01   File "<frozen importlib._bootstrap>", line 1331, in findand_load_unlocked
+2024-11-17 17:48:01   File "<frozen importlib._bootstrap>", line 935, in loadunlocked
+2024-11-17 17:48:01   File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+2024-11-17 17:48:01   File "<frozen importlib._bootstrap>", line 488, in callwith_frames_removed
+2024-11-17 17:48:01   File "/usr/src/app/Transcendence/asgi.py", line 5, in <module>
+2024-11-17 17:48:01     import game.routing
+2024-11-17 17:48:01   File "/usr/src/app/game/routing.py", line 2, in <module>
+2024-11-17 17:48:01     from . import consumers
+2024-11-17 17:48:01   File "/usr/src/app/game/consumers.py", line 631, in <module>
+2024-11-17 17:48:01     class GamePingPongConsumer(AsyncWebsocketConsumer):
+2024-11-17 17:48:01   File "/usr/src/app/game/consumers.py", line 1088, in GamePingPongConsumer
+2024-11-17 17:48:01     @sync_to_async
+2024-11-17 17:48:01      ^^^^^^^^^^^^^
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/site-packages/asgiref/sync.py", line 609, in sync_to_async
+2024-11-17 17:48:01     return SyncToAsync(
+2024-11-17 17:48:01            ^^^^^^^^^^^^
+2024-11-17 17:48:01   File "/usr/local/lib/python3.12/site-packages/asgiref/sync.py", line 399, in init**
+2024-11-17 17:48:01     raise TypeError("sync_to_async can only be applied to sync functions.")
+2024-11-17 17:48:01 TypeError: sync_to_async can only be applied to sync functions.
+
+
+ """

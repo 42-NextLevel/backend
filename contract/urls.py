@@ -1,5 +1,4 @@
 from django.urls import path
-from .views import GameRoomViewSet
 # render 함수를 사용하기 위해 import
 from django.shortcuts import render
 from .views import get_contract_info

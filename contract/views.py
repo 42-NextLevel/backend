@@ -1,6 +1,5 @@
 from django.shortcuts import render
-from solidity.scripts import Web3Client
-from solidity.scripts import compile
+from .solidity.scripts import Web3Client  # 상대 경로로 수정
 from django.http import JsonResponse
 
 # Create your views here.
