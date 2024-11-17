@@ -1007,6 +1007,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	async def save_blockchain_data(self, players):
 		from contract.solidity.scripts.Web3Client import Web3Client
 		from asgiref.sync import sync_to_async
+		import os
 		
 		try:
 			# 환경 변수 확인
