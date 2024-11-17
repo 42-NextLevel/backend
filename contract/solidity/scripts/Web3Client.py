@@ -6,7 +6,6 @@ from pathlib import Path
 from datetime import datetime
 from eth_account import Account
 from solcx import compile_standard, install_solc
-from django.apps import apps
 
 class Web3Client:
 	_instance = None
@@ -21,31 +20,19 @@ class Web3Client:
 		self.alchemy_url = os.environ.get('WEB3_PROVIDER_URL')
 		self.w3 = Web3(Web3.HTTPProvider(self.alchemy_url))
 		self._load_contract()
-		self._load_contract_artifacts()
-		self._setup_account()
 
 	def _load_contract(self):
-		ContractInstance = apps.get_model('contract', 'ContractAddress')
-		contract_instance = ContractInstance.objects.first()		
-		if contract_instance:
-			self.contract_address = contract_instance.address
-		else:
-			try:
-				from .compile import compile_contracts
-				compile_contracts()
-				contract_address = self._deploy_contract(w3=self.w3)
-				# 새 컨트랙트 주소 저장
-				contract_instance = ContractInstance.objects.create(
-					address=contract_address,
-				)
-				self.contract_address = contract_address
-			except Exception as e:
-				print(f"Contract deployment failed: {e}")
-				raise
+		self._load_contract_artifacts()
+		self._setup_account()
+		self.contract_address = os.environ.get("CONTRACT_ADDRESS")
+		if not self.contract_address:
+			self.contract_address = self._deploy_contract()
+			with open('.env', 'a') as f:
+				f.write(f'\nCONTRACT_ADDRESS="{self.contract_address}"')
 
 	def _load_contract_artifacts(self):
 		"""컨트랙트 ABI와 바이트코드 로딩"""
-		contract_path = Path(__file__).parent / 'builds' / 'PongHistory.json'
+		contract_path = Path(__file__).parent.parent / 'builds' / 'PongHistory.json'
 		with open(contract_path, 'r') as file:
 			compiled_contract = json.load(file)
 		self.contract_abi = compiled_contract['abi']
@@ -77,7 +64,7 @@ class Web3Client:
 			transaction, 
 			os.environ.get('ETHEREUM_PRIVATE_KEY')
 		)
-		tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+		tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
 
 		# 트랜잭션 영수증 대기
 		tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
@@ -150,7 +137,7 @@ class Web3Client:
 			'score2': history[7]
 		}
 
-	async def add_match_history(self, game_id: int, match_info: tuple) -> str:
+	def add_match_history(self, game_id: int, match_info: tuple) -> str:
 		"""새로운 매치 히스토리 추가"""
 		contract = self.get_contract()
 		
@@ -169,9 +156,10 @@ class Web3Client:
 			txn,
 			os.environ.get('ETHEREUM_PRIVATE_KEY')
 		)
-		tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+		tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
 		
 		# 트랜잭션 영수증 대기
-		tx_receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash)
+		tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+		print(f"Transaction successful! Hash: {tx_hash.hex()}")
 		
 		return tx_hash.hex()

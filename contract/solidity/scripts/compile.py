@@ -6,15 +6,7 @@ from pathlib import Path
 
 def compile_contracts():
 	try:
-		current_solcx_dir = Path(__file__).resolve().parent
-		solcx_dir = current_solcx_dir / '.solcx'
-		os.makedirs(solcx_dir, exist_ok=True)
-
-		# solcx에 설치 경로 지정
-		os.environ['SOLCX_BINARY_PATH'] = str(solcx_dir)
-
-		# # solc 버전 설치 (프로젝트에 맞는 버전 사용)
-		# install_solc("0.8.26")
+		install_solc("0.8.24")
 		
 		# 소스 디렉토리와 빌드 디렉토리 경로
 		current_dir = Path(__file__).parent.parent
