@@ -1060,10 +1060,34 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					except Exception as e:
 						logger.error(f"Cache set error in 3rd room: {e}")
 			self.send_to_room_socket(room_id=room_3rd, event='destroy')
+
+	@sync_to_async
+	def save_blockChain(self, players):  # async 제거
+		from contract.solidity.scripts import Web3Client
+		client = Web3Client()
+		match_info = client.make_match_struct(
+			start_time=self.game_state['start_time'],
+			mathch_type=self.game_state['match_type'],
+			user1=players[0]['intraId'],
+			user2=players[1]['intraId'],
+			nick1=players[0]['nickname'],
+			nick2=players[1]['nickname'],
+			score1=self.game_state['score']['player1'],
+			score2=self.game_state['score']['player2']
+		)
+
+		game_id = self.game_id
+		tx_hash = client.add_match_history(game_id, match_info)
+		print(f"Transaction hash: {tx_hash}", file=sys.stderr)
+
+		
+
+		
 		
 
 	@sync_to_async
-	def save_game_log(self, winner):
+	async def save_game_log(self, winner):
+		
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
 		
 		# Game ID에서 room_id와 match 정보 파싱
@@ -1080,7 +1104,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		# room[f'game{room_type}_ended'] = True 인경우 같이 게임한 유저는 나가야함
 		if room_type in [1, 2] and room.get(f'game{room_type}_ended', False):
 			return
-		
 		
 		try:
 			# started_at 처리
@@ -1131,6 +1154,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				else:
 					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
 			
+			# 블록체인 저장
+			await self.save_blockChain(players)
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
 			# room 삭제 조건
@@ -1146,7 +1171,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				cache.delete(f'game_room_{room_id}')
 				# 토너먼트 게임일 경우
 				# 두 게임 모두 종료되면 room 삭제
-					
+			
 				
 		except Exception as e:
 			print(f"Error saving game log: {str(e)}", file=sys.stderr)
