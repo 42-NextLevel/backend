@@ -10,5 +10,5 @@ from .views import get_contract_info
 # /contract/game/2
 # /contract/game/3
 urlpatterns = [
-    path('contract/game/<int:game_id>', get_contract_info, name='get_contract_info'),
+    path('game/<int:game_id>', get_contract_info, name='get_contract_info'),
 ]
