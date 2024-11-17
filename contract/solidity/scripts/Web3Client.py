@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime
 from eth_account import Account
 from solcx import compile_standard, install_solc
+from asgiref.sync import sync_to_async
 
 class Web3Client:
 	_instance = None
@@ -136,7 +137,9 @@ class Web3Client:
 			'score2': history[7]
 		}
 
-	def add_match_history(self, game_id: int, match_info: tuple) -> str:
+
+	
+	async def add_match_history(self, game_id: int, match_info: tuple) -> str:
 		"""새로운 매치 히스토리 추가"""
 		contract = self.get_contract()
 		
@@ -146,7 +149,7 @@ class Web3Client:
 			'from': self.account.address,
 			'nonce': nonce,
 			'gas': 2000000,
-			'gasPrice': self.w3.eth.gas_price,
+			'gasPrice': self.w3.eth.gas_price * 2,
 			'chainId': 11155111
 		})
 

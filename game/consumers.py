@@ -1003,8 +1003,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			self.send_to_room_socket(room_id=room_3rd, event='destroy')
 		
 
-	@sync_to_async
-	def save_blockchain_data(self, players):
+	
+	async def save_blockchain_data(self, players):
 		from contract.solidity.scripts.Web3Client import Web3Client  # 정확한 경로로 수정
 		
 		try:
@@ -1025,7 +1025,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			)
 			# 마지막으로 생성된 게임 ID 가져오기 auto increment
 			game_id = int(GameLog.objects.latest('id').id)
-			tx_hash = client.add_match_history(game_id, match_info)
+			tx_hash = await client.add_match_history(game_id, match_info)
 			print(f"Transaction hash: {tx_hash}", file=sys.stderr)
 			return tx_hash
 			
