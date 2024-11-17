@@ -5,9 +5,9 @@ from .views import get_contract_info
 
 
 # 예상되는 url 패턴
-# /contract/game/1
-# /contract/game/2
-# /contract/game/3
+# api/contract/game/1
+# api/contract/game/2
+# api/contract/game/3
 urlpatterns = [
     path('game/<int:game_id>', get_contract_info, name='get_contract_info'),
 ]
