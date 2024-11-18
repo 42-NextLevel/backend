@@ -1,3 +1,4 @@
+import sys
 import os
 import json
 import time
@@ -124,10 +125,11 @@ class Web3Client:
 
 	def format_match_history(self, history: tuple) -> dict:
 		"""매치 히스토리 데이터를 읽기 쉬운 형태로 변환"""
-		readable_time = datetime.fromtimestamp(history[0]).strftime('%Y-%m-%d %H:%M:%S')
-		
+		print(history, sys.stderr)
+		# readable_time = datetime.fromtimestamp(history[0]).strftime('%Y-%m-%d %H:%M:%S')
+		# print(f"log2: {readable_time}", sys.stderr)
 		return {
-			'startTime': readable_time,
+			'startTime': history[0],
 			'matchType': history[1],
 			'user1': self._clean_bytes16(history[2]),
 			'user2': self._clean_bytes16(history[3]),
@@ -137,8 +139,6 @@ class Web3Client:
 			'score2': history[7]
 		}
 
-
-	
 	async def add_match_history(self, game_id: int, match_info: tuple) -> str:
 		"""새로운 매치 히스토리 추가"""
 		contract = self.get_contract()
