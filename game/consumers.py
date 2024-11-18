@@ -823,6 +823,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				num_disconnected = int(room_final.get('disconnected', 0))
 				if num_disconnected > 0:
 					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_final')
+					print(f"Final room deleted due to 2 players disconnecting", file=sys.stderr)
 				else:
 					room_final['disconnected'] = num_disconnected + 1
 					try:
@@ -1004,6 +1005,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				num_disconnected = int(room_3rd.get('disconnected', 0))
 				if num_disconnected > 0:
 					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_3rd')
+					print(f"3rd room deleted due to 1 player disconnecting", file=sys.stderr)
 				else:
 					room_3rd['disconnected'] = num_disconnected + 1
 					try:
