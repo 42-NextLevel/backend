@@ -780,14 +780,15 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			if self.pause_task and not self.pause_task.done():
 				self.pause_task.cancel()
 			self.pause_task = asyncio.create_task(self.resume_game_after_delay())
-			
-		await self.handle_room_disconnect()
+		
+		if self.game_state['game_started']:
+			await self.handle_room_disconnect()
 
 			
 		# 게임 종료 처리
 		if self.score_handler:
 			self.score_handler.game_end = True
-			self.score_handler = None
+			self.score_handler = None			
 
 
 		if self.backup_task:
@@ -810,7 +811,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		disconnect_count = len(self.game_state['disconnected_player'])
 		print(f"Disconnected players: {self.game_state['disconnected_player']}", file=sys.stderr)
 		print(f"Disconnect count: {disconnect_count}", file=sys.stderr)
-		if disconnect_count == 2:
+		if disconnect_count == 2 and self.game_state['game_started']:
 			await sync_to_async(cache.set)(f'game_status_{self.game_id}', False, timeout=ROOM_TIMEOUT)
 			print(f"Game ended due to 2 players disconnecting", file=sys.stderr)
 			# 2. 탈주자 수에 따른 처리
@@ -983,6 +984,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		# 게임 로그 저장
 		print(f"Game {self.game_id} ended. Winner: {event['winner']}", file=sys.stderr)
+		await self.handle_deserter()
 		await self.save_game_log(event['winner'])
 		
 		logger.info(f"Game {self.game_id} ended. Winner: {event['winner']}")
