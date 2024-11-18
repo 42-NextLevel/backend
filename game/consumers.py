@@ -93,6 +93,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 					}
 				)
 				await cache.delete(f'game_room_{self.room_id}')
+				print(f"Deleted tournament room {self.room_id}", file=sys.stderr)
 				
 			# 일반 게임에서 모든 플레이어가 나가고 게임 시작 전이면 삭제
 			elif len(players) == 0 and not room['game_started']:
@@ -118,6 +119,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 	def set_room(self, room: Dict[str, Any]):
 		if room['host'] is None:
 			cache.delete(f'game_room_{self.room_id}')
+			print(f"Deleted room {self.room_id} due to host leaving", file=sys.stderr)
 		else:
 			cache.set(f'game_room_{self.room_id}', room, timeout=ROOM_TIMEOUT)
 
@@ -165,12 +167,6 @@ class GameConsumer(AsyncWebsocketConsumer):
 						return
 					else:
 						print(f"Keeping tournament room {self.room_id} alive despite no players", file=sys.stderr)
-
-		room['players'] = players
-		await self.set_room(room)
-		await self.broadcast_room_update(room)
-
-					
 
 		room['players'] = players
 		await self.set_room(room)
@@ -1110,9 +1106,11 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			room[f'game{room_type}_ended'] = True
 			if room.get('game1_ended', False) and room.get('game2_ended', False):
 				cache.delete(f'game_room_{room_id}')
+				print(f"Room {room_id} deleted", file=sys.stderr)
 			cache.set(f'game_room_{room_id}', room)
 		else:
 			cache.delete(f'game_room_{room_id}')
+			print(f"Room {room_id} deleted", file=sys.stderr)
 
 	async def save_game_log(self, winner):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
@@ -1175,7 +1173,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
 			
 			# 블록체인 저장
-			asyncio.create_task(self.save_blockchain_data(players))
+			# asyncio.create_task(self.save_blockchain_data(players))
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
 			# 캐시 처리
