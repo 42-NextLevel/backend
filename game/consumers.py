@@ -129,36 +129,46 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 		players = room.get('players', [])
 		print(f"Current players: {players}", file=sys.stderr)
-		if not add and len(players) == 0:
-			cache.delete(f'game_room_{self.room_id}')
-			return
-		if add:
+		room_type = int(room.get('roomType', 0))
 
-			# 토너먼트 방식이라서 2명씩 묶어서 게임 시작
+		if add:
+			# 새로운 플레이어 추가
 			if len(players) == 0 and not room.get('host'):
 				room['host'] = self.user_data['nickname']
-
 
 			if self.user_data['intraId'] not in [p['intraId'] for p in players]:
 				players.append(self.user_data)
 
+			# 방 타입에 따른 플레이어 수 제한
 			if len(players) == 4:
 				game1 = [players[0], players[1]]
 				game2 = [players[2], players[3]]
 				room['game1'] = game1
 				room['game2'] = game2
+
 		else:
+			# 플레이어 제거
 			players = [p for p in players if p['intraId'] != self.user_data['intraId']]
-			# change host if host leaves
-			print(f"Host: {room['host']}, User: {self.user_data['intraId']}", file=sys.stderr)
-			print(f"Players: {players}", file=sys.stderr)
+			print(f"Removed player {self.user_data['nickname']} from room {self.room_id}", file=sys.stderr)
+			
+			# 호스트 변경 처리
 			if room['host'] == self.user_data['nickname']:
 				if players:
-					print("Changing host", file=sys.stderr)
+					print(f"Changing host from {self.user_data['nickname']} to {players[0]['nickname']}", file=sys.stderr)
 					room['host'] = players[0]['nickname']
 				else:
 					room['host'] = None
-					cache.delete(f'game_room_{self.room_id}')
+					# 토너먼트 final/3rd place 방은 유지
+					if room_type not in [3, 4]:
+						print(f"Deleting normal room {self.room_id} - no players left", file=sys.stderr)
+						await self.set_room({'host': None})
+						return
+					else:
+						print(f"Keeping tournament room {self.room_id} alive despite no players", file=sys.stderr)
+
+		room['players'] = players
+		await self.set_room(room)
+		await self.broadcast_room_update(room)
 
 					
 
