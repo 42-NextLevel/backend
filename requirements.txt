@@ -77,3 +77,4 @@ websockets==13.1
 wheel==0.44.0
 yarl==1.17.1
 zope.interface==7.0.3
+bleach==4.1.0
