@@ -1082,6 +1082,9 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def save_game_log(self, winner):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
+		# winner만 게임을 저장하도록 수정
+		if self.player_number != winner:
+			return
 		
 		room_id = '_'.join(self.game_id.split('_')[:-1])
 		print(f"Room ID: {room_id}", file=sys.stderr)
