@@ -1019,7 +1019,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			get_latest_id = sync_to_async(lambda: GameLog.objects.latest('id').id)
 			game_id = await get_latest_id()
 
-			client = Web3Client()
+			client = await sync_to_async(Web3Client)()
 			start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 			
 			match_info = client.make_match_struct(
