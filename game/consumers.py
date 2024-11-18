@@ -323,8 +323,8 @@ class GamePhysics:
 		self.COLLISION_SPEED_INCREASE = 1.05  # 충돌 후 속도 증가 비율
 
 		# 물리 연산 설정
-		self.MAX_DELTA_TIME = 1/120
-		self.PHYSICS_SUBSTEPS = 3
+		self.MAX_DELTA_TIME = 1/60
+		self.PHYSICS_SUBSTEPS = 2
 
 		# 로깅 설정
 		self.debug_counter = 0
@@ -587,7 +587,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		self.intra_id = None
 		self.game_state = None
 		self.last_update_time = time.time()
-		self.update_interval = 1/60  # 60 FPS
+		self.TARGET_FPS = 60
+		self.FRAME_TIME = 1/self.TARGET_FPS
 		self.backup_task = None
 		self.physics = GamePhysics()
 		self.last_cache_update = time.time()
@@ -921,12 +922,17 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		while self.game_state['game_started']:
 			if not self.game_state['is_paused']:  # 공유 상태로 체크
 				current_time = time.time()
+				delta_time = current_time - self.last_update_time
 				
-				if current_time - self.last_update_time >= self.update_interval:
+				if delta_time >= self.FRAME_TIME:
 					await self.update_game_state()
 					self.last_update_time = current_time
-			
-			await asyncio.sleep(self.UPDATE_RATE/2)
+				next_frame_time = self.last_update_time + self.FRAME_TIME
+				sleep_time = max(0, next_frame_time - time.time())
+				if sleep_time > 0:
+					await asyncio.sleep(sleep_time)
+			else:
+				await asyncio.sleep(self.FRAME_TIME)
 
 	async def update_game_state(self):
 		current_time = time.time()
@@ -1025,10 +1031,11 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			get_latest_id = sync_to_async(lambda: GameLog.objects.latest('id').id)
 			game_id = await get_latest_id()
 
-			client = await sync_to_async(Web3Client)()
+			# Web3Client 초기화와 메서드 호출을 비동기로 처리
+			web3_client = await sync_to_async(Web3Client)()
 			start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 			
-			match_info = client.make_match_struct(
+			match_info = await sync_to_async(web3_client.make_match_struct)(
 				start_time=start_time,
 				match_type=int(self.match),
 				user1=str(players[0]['intraId']),
@@ -1039,7 +1046,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				score2=int(self.game_state['score']['player2'])
 			)
 
-			tx_hash = await client.add_match_history(game_id, match_info)
+			tx_hash = await sync_to_async(web3_client.add_match_history)(game_id, match_info)
 			print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
 			return tx_hash
 
