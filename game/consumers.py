@@ -345,16 +345,22 @@ class GamePhysics:
 		return velocity
 
 	def reset_ball(self):
-		"""공을 터널 중앙에서 랜덤한 방향으로 시작"""
 		initial_speed = self.BALL_SPEED
 		angle = random.uniform(-math.pi/4, math.pi/4)
 		
-		vx = initial_speed * math.sin(angle)
+		# 방향 벡터 계산
+		vx = math.sin(angle)           # 각도에 따른 x방향
 		vy = (random.random() - 0.5) * 2
 		vz = initial_speed
 		
 		if random.random() < 0.5:
 			vz *= -1
+
+		# 속도 벡터 정규화 후 initial_speed 적용
+		total_speed = math.sqrt(vx**2 + vy**2 + vz**2)
+		vx = (vx / total_speed) * initial_speed
+		vy = (vy / total_speed) * initial_speed
+		vz = (vz / total_speed) * initial_speed
 
 		return {
 			'position': {'x': 0, 'y': 0.2, 'z': -self.TUNNEL_LENGTH/2},
