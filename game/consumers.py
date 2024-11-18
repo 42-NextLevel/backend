@@ -811,14 +811,16 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		disconnect_count = len(self.game_state['disconnected_player'])
 		print(f"Disconnected players: {self.game_state['disconnected_player']}", file=sys.stderr)
 		print(f"Disconnect count: {disconnect_count}", file=sys.stderr)
+		
 		if disconnect_count == 2 and self.game_state['game_started']:
 			await sync_to_async(cache.set)(f'game_status_{self.game_id}', False, timeout=ROOM_TIMEOUT)
 			print(f"Game ended due to 2 players disconnecting", file=sys.stderr)
-			# 2. 탈주자 수에 따른 처리
-			# 같은 게임에서 2명 탈주한 경우 final 룸 처리
+			
+			# 토너먼트 매치가 아닌 경우 early return
 			if self.match == '0' or self.match == '3' or self.match == '4':
 				return
-			room_final = await cache.get(f'game_room_{self.game_id}_final')
+				
+			room_final = await cache.aget(f'game_room_{self.game_id}_final')
 			if room_final:
 				num_disconnected = int(room_final.get('disconnected', 0))
 				if num_disconnected > 0:
@@ -834,7 +836,16 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 						)
 					except Exception as e:
 						logger.error(f"Cache set error in final room: {e}")
-			self.send_to_room_socket(room_id=room_final, event='destroy')
+				
+				# send_to_room_socket 호출 수정
+				await self.send_to_room_socket(
+					room_id=room_final,
+					event_type='room.destroy',  # 이벤트 타입 지정
+					data={
+						'reason': 'all_players_disconnected',
+						'game_id': self.game_id
+					}
+				)
 		
 		
 
@@ -985,7 +996,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		# 게임 로그 저장
 		print(f"Game {self.game_id} ended. Winner: {event['winner']}", file=sys.stderr)
-		await self.handle_deserter()
+		await self.handle_deserter(event)
 		await self.save_game_log(event['winner'])
 		
 		logger.info(f"Game {self.game_id} ended. Winner: {event['winner']}")
