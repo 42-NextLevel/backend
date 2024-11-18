@@ -215,7 +215,7 @@ class GameState:
 	@classmethod
 	def get_game(cls, game_id):
 		if game_id not in cls.active_games:
-			initial_speed = 8  # physics의 BALL_SPEED와 동일하게
+			initial_speed = 4  # physics의 BALL_SPEED와 동일하게
 			angle = random.uniform(-math.pi/4, math.pi/4)  # -45도에서 45도 사이의 랜덤 각도
 			
 			# 삼각함수로 x, y 방향 속도 계산
@@ -313,7 +313,7 @@ class GamePhysics:
 		self.PLAYER2_HIT_ZONE_END = self.PADDLE_Z_PLAYER2 - self.HIT_ZONE_DEPTH
 
 		# 속도 관련 상수
-		self.BALL_SPEED = 10
+		self.BALL_SPEED = 4
 		self.BALL_SPEED_FACTOR = 4
 		self.MIN_SPEED = 3
 		self.MAX_SPEED = self.BALL_SPEED * 2.0  # 최대 속도 제한
@@ -1031,10 +1031,11 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			get_latest_id = sync_to_async(lambda: GameLog.objects.latest('id').id)
 			game_id = await get_latest_id()
 
-			# Web3Client 초기화와 메서드 호출을 비동기로 처리
-			web3_client = await sync_to_async(Web3Client)()
+			# Web3Client는 동기적 초기화
+			web3_client = Web3Client()  # sync_to_async 제거
 			start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 			
+			# make_match_struct는 동기 함수이므로 sync_to_async 사용
 			match_info = await sync_to_async(web3_client.make_match_struct)(
 				start_time=start_time,
 				match_type=int(self.match),
@@ -1046,7 +1047,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				score2=int(self.game_state['score']['player2'])
 			)
 
-			tx_hash = await sync_to_async(web3_client.add_match_history)(game_id, match_info)
+			# add_match_history는 이미 async 함수이므로 직접 await
+			tx_hash = await web3_client.add_match_history(game_id, match_info)
 			print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
 			return tx_hash
 

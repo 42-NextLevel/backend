@@ -143,25 +143,34 @@ class Web3Client:
 		"""새로운 매치 히스토리 추가"""
 		contract = self.get_contract()
 		
-		# 트랜잭션 생성
-		nonce = self.w3.eth.get_transaction_count(self.account.address)
-		txn = contract.functions.addHistory(game_id, match_info).build_transaction({
+		# 트랜잭션 생성을 비동기로 처리
+		get_nonce = sync_to_async(self.w3.eth.get_transaction_count)
+		get_gas_price = sync_to_async(lambda: self.w3.eth.gas_price * 2)
+		
+		nonce = await get_nonce(self.account.address)
+		gas_price = await get_gas_price()
+		
+		# build_transaction을 비동기로 처리
+		build_tx = sync_to_async(contract.functions.addHistory(game_id, match_info).build_transaction)
+		txn = await build_tx({
 			'from': self.account.address,
 			'nonce': nonce,
 			'gas': 2000000,
-			'gasPrice': self.w3.eth.gas_price * 2,
+			'gasPrice': gas_price,
 			'chainId': 11155111
 		})
 
-		# 트랜잭션 서명 및 전송
-		signed_txn = self.w3.eth.account.sign_transaction(
-			txn,
-			os.environ.get('ETHEREUM_PRIVATE_KEY')
-		)
-		tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+		# 트랜잭션 서명
+		sign_tx = sync_to_async(self.w3.eth.account.sign_transaction)
+		signed_txn = await sign_tx(txn, os.environ.get('ETHEREUM_PRIVATE_KEY'))
 		
-		# 트랜잭션 영수증 대기
-		tx_receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+		# 트랜잭션 전송
+		send_raw_tx = sync_to_async(self.w3.eth.send_raw_transaction)
+		tx_hash = await send_raw_tx(signed_txn.raw_transaction)
+		
+		# 트랜잭션 영수증 대기를 비동기로 처리
+		wait_for_tx = sync_to_async(self.w3.eth.wait_for_transaction_receipt)
+		tx_receipt = await wait_for_tx(tx_hash)
+		
 		print(f"Transaction successful! Hash: {tx_hash.hex()}")
-		
 		return tx_hash.hex()
