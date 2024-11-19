@@ -1033,18 +1033,18 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 
 	
-	async def save_blockchain_data(self, players):
+	async def save_blockchain_data(self, players, room_copy):
 		try:
 			if not os.environ.get('ETHEREUM_PRIVATE_KEY') or not os.environ.get('WEB3_PROVIDER_URL'):
 				print("Missing required environment variables", file=sys.stderr)
 				return None
 
 			game_id = await sync_to_async(lambda: GameLog.objects.latest('id').id)()
-			room = await self.room_state_manager.get_room(f'game_room_{self.game_id}')
+			
 			
 			def sync_blockchain_operations():
 				web3_client = Web3Client()
-				start_time = room.get('started_at', datetime.now())
+				start_time = room_copy.get('started_at', datetime.now())
 				
 				match_info = web3_client.make_match_struct(
 					start_time=start_time,
@@ -1163,7 +1163,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			
 			# 블록체인 저장
 			loop = asyncio.get_event_loop()
-			loop.create_task(self.save_blockchain_data(players))
+			loop.create_task(self.save_blockchain_data(players, room.copy()))
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
 			# 캐시 처리
