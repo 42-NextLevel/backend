@@ -207,6 +207,9 @@ from django.core.cache import cache
 from asgiref.sync import sync_to_async
 from django.utils import timezone
 from .models import GameLog, UserGameLog
+from contract.solidity.scripts.Web3Client import Web3Client
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -270,17 +273,7 @@ class GameState:
 		if game_id in cls._game_tasks:
 			del cls._game_tasks[game_id]
 
-import math
-import random
-import logging
 
-logger = logging.getLogger(__name__)
-
-import math
-import random
-import logging
-
-logger = logging.getLogger(__name__)
 
 class GamePhysics:
 	def __init__(self):
@@ -1041,46 +1034,39 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	
 	async def save_blockchain_data(self, players):
-		loop = asyncio.get_event_loop()
-		
-		async def _blockchain_save():
-			from contract.solidity.scripts.Web3Client import Web3Client
-			
-			try:
-				if not os.environ.get('ETHEREUM_PRIVATE_KEY') or not os.environ.get('WEB3_PROVIDER_URL'):
-					print("Missing required environment variables", file=sys.stderr)
-					return None
-
-				game_id = await sync_to_async(lambda: GameLog.objects.latest('id').id)()
-				
-				def sync_blockchain_operations():
-					web3_client = Web3Client()
-					room = self.room_state_manager.get_room(f'game_room_{self.game_id}')
-					start_time = room.get('started_at', datetime.now())
-					
-					match_info = web3_client.make_match_struct(
-						start_time=start_time,
-						match_type=int(self.match),
-						user1=str(players[0]['intraId']),
-						user2=str(players[1]['intraId']), 
-						nick1=str(players[0]['nickname']),
-						nick2=str(players[1]['nickname']),
-						score1=int(self.game_state['score']['player1']),
-						score2=int(self.game_state['score']['player2'])
-					)
-					return web3_client, match_info
-
-				web3_client, match_info = await loop.run_in_executor(self.executor, sync_blockchain_operations)
-				tx_hash = await web3_client.add_match_history(game_id, match_info)
-				print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
-				return tx_hash
-
-			except Exception as e:
-				print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
-				traceback.print_exc(file=sys.stderr)
+		try:
+			if not os.environ.get('ETHEREUM_PRIVATE_KEY') or not os.environ.get('WEB3_PROVIDER_URL'):
+				print("Missing required environment variables", file=sys.stderr)
 				return None
 
-		return await _blockchain_save()
+			game_id = await sync_to_async(lambda: GameLog.objects.latest('id').id)()
+			room = await self.room_state_manager.get_room(f'game_room_{self.game_id}')
+			
+			def sync_blockchain_operations():
+				web3_client = Web3Client()
+				start_time = room.get('started_at', datetime.now())
+				
+				match_info = web3_client.make_match_struct(
+					start_time=start_time,
+					match_type=int(self.match),
+					user1=str(players[0]['intraId']),
+					user2=str(players[1]['intraId']), 
+					nick1=str(players[0]['nickname']),
+					nick2=str(players[1]['nickname']),
+					score1=int(self.game_state['score']['player1']),
+					score2=int(self.game_state['score']['player2'])
+				)
+				return web3_client, match_info
+
+			web3_client, match_info = await asyncio.get_event_loop().run_in_executor(self.executor, sync_blockchain_operations)
+			tx_hash = await web3_client.add_match_history(game_id, match_info)
+			print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
+			return tx_hash
+
+		except Exception as e:
+			print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
+			traceback.print_exc(file=sys.stderr)
+			return None
 
 	@sync_to_async
 	def create_game_log(self, start_time, match_type):
