@@ -1044,7 +1044,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			
 			def sync_blockchain_operations():
 				web3_client = Web3Client()
-				start_time = room_copy.get('started_at', datetime.now())
+				start_time = datetime.fromtimestamp(room_copy['started_at'])  # float를 datetime으로 변환
 				
 				match_info = web3_client.make_match_struct(
 					start_time=start_time,
