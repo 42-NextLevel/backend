@@ -16,8 +16,7 @@ class RoomStateManager:
 
 	async def get_room_lock(self, room_id: str) -> asyncio.Lock:
 		# room_id가 딕셔너리인 경우 문자열로 변환
-		if isinstance(room_id, dict):
-			room_id = str(room_id.get('id', ''))
+		
 		
 		async with self._lock_creation_lock:
 			if room_id not in self.room_locks:
@@ -27,8 +26,7 @@ class RoomStateManager:
 	async def get_room(self, room_id: str) -> Optional[Dict[str, Any]]:
 		"""Room 데이터 조회"""
 		# room_id가 딕셔너리인 경우 문자열로 변환
-		if isinstance(room_id, dict):
-			room_id = str(room_id.get('id', ''))
+		
 			
 		result = await sync_to_async(cache.get)(room_id)
 		return result
@@ -36,9 +34,10 @@ class RoomStateManager:
 	async def set_room(self, room_id: str, room: Dict[str, Any]):
 		"""Room 데이터 저장"""
 		# room_id가 딕셔너리인 경우 문자열로 변환
-		if isinstance(room_id, dict):
-			room_id = str(room_id.get('id', ''))
-		if  (room['roomType'] == 3 or room['roomType'] == 4) and room['version'] == 0:
+		print("set Room id:", room_id, sys.stderr)
+		print("set Room:", room, sys.stderr)
+		
+		if  (int(room['roomType']) == 3 or int(room['roomType'] == 4)) and int(room['version']) == 0:
 			print("set Room id:", room_id, sys.stderr)
 			await sync_to_async(cache.set)(room_id, room)
 			return
