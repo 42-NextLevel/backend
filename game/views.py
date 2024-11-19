@@ -117,81 +117,74 @@ class GameRoomViewSet(viewsets.ViewSet):
 
 	@action(detail=True, methods=['post'])
 	def start_game(self, request):
-		roomId = request.data.get('roomId')
-		"""게임을 시작합니다."""
-		room = cache.get(f'game_room_{roomId}')
-		if not room:
-			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+		@async_to_sync 
+		async def async_start_game():
+			roomId = request.data.get('roomId')
+			room = await self.room_manager.get_room(f'game_room_{roomId}')
+			
+			if not room:
+				return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
-		# intra_id = CookieManager.get_intra_id_from_cookie(request)
+			if (room['roomType'] == 0 and len(room['players']) != 2) or (room['roomType'] == 1 and len(room['players']) != 4):
+				return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
 
-		# host = room['host']
-		
-		# if intra_id != room['host']:
-		# 	return Response({'error': 'Only host can start the game'}, status=status.HTTP_403_FORBIDDEN)
-		
+			room['game_started'] = True
+			room['started_at'] = time.time() + (9 * 3600)
+			await self.room_manager.set_room(f'game_room_{roomId}', room)
 
-		# 인원수 체크
-		if (room['roomType'] == 0 and len(room['players']) != 2) or (room['roomType'] == 1 and len(room['players']) != 4):
-			return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
+			roomType = room['roomType'] 
+			if roomType == 1:
+				# Final room
+				final_room_id = f"{roomId}_final"
+				room1 = {
+					'id': final_room_id,
+					'name': '결승전',
+					'roomType': 3,
+					'players': [],
+					'host': None,
+					'game_started': False,
+					'created_at': time.time(),
+					'game1': [],
+					'game2': [],
+					'game1_ended': False,
+					'game2_ended': False,
+					'started_at': None,
+					'disconnected': 0,
+					'version': 0
+				}
+				await self.room_manager.set_room(f'game_room_{final_room_id}', room1)
+				
+				# 3rd place room
+				third_room_id = f"{roomId}_3rd"
+				room2 = {
+					'id': third_room_id,
+					'name': '3,4위 결정전',
+					'roomType': 4,
+					'players': [],
+					'host': None,
+					'game_started': False,
+					'created_at': time.time(),
+					'game1': [],
+					'game2': [],
+					'game1_ended': False,
+					'game2_ended': False,
+					'started_at': None,
+					'disconnected': 0,
+					'version': 0
+				}
+				await self.room_manager.set_room(f'game_room_{third_room_id}', room2)
 
-		room['game_started'] = True
-		room['started_at'] = time.time() + (9 * 3600)  # 9시간을 초 단위로 추가
-		cache.set(f'game_room_{roomId}', room, timeout=ROOM_TIMEOUT)
-		# 만약 토너면트 라면 패자 룸 승사 룸 생성 
-		roomType = room['roomType']
-		if roomType == 1: # 토너먼트
-			room_id = roomId + '_final'
-			room1 = {
-				'id': room_id,
-				'name': '결승전',
-				'roomType': 3,
-				'players': [],
-				'host': None,
-				'game_started': False,
-				'created_at': time.time(),
-				'game1': [],
-				'game2': [],
-				'game1_ended': False,
-				'game2_ended': False,
-				'started_at': None,
-				'disconnected': 0,
-				'version': 0  # version 필드 추가
-			}
-			print("Room ID for final:", room_id, sys.stderr)
-			self.room_manager.set_room(f'game_room_{room_id}', room1)
-			print("room1", room1, sys.stderr)
-			room_id = roomId + '_3rd'
-			room2 = {
-				'id': room_id,
-				'name': '3,4위 결정전',
-				'roomType': 4,
-				'players': [],
-				'host': None,
-				'game_started': False,
-				'created_at': time.time(),
-				'game1': [],
-				'game2': [],
-				'game1_ended': False,
-				'game2_ended': False,
-				'started_at': None,
-				'disconnected': 0,
-				'version': 0  # version 필드 추가
-			}
-			print("Room ID for 3rd:", room_id, sys.stderr)
-			self.room_manager.set_room(f'game_room_{room_id}', room2)
+			channel_layer = get_channel_layer()
+			await channel_layer.group_send(
+				f'room_{roomId}',
+				{
+					'type': 'game_start',
+					'data': room
+				}
+			)
+			return Response(status=status.HTTP_200_OK)
 
-		channel_layer = get_channel_layer()
-		async_to_sync(channel_layer.group_send)(
-			f'room_{roomId}',
-			{
-				'type': 'game_start',
-				'data': room
-			}
-		)
-		
-		
-		return Response(status=status.HTTP_200_OK)
+		return async_start_game()
 	
 	def players_info(self, request):
 		
