@@ -68,6 +68,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			'game1_ended': False,
 			'game2_ended': False,
 			'started_at': None,
+			'disconnected': 0,
 			'version': 0  # 버전 추가
 		}
 		print("Room id:", room_id, sys.stderr)

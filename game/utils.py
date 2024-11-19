@@ -39,6 +39,7 @@ class RoomStateManager:
 		if isinstance(room_id, dict):
 			room_id = str(room_id.get('id', ''))
 		if  (room['roomType'] == 3 or room['roomType'] == 4) and room['version'] == 0:
+			print("set Room id:", room_id, sys.stderr)
 			await sync_to_async(cache.set)(room_id, room)
 			return
 			
