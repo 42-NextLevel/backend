@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
+from asgiref.sync import async_to_sync, sync_to_async  # sync_to_async 추가
 import uuid
 from django.core.cache import cache
 import time
@@ -13,6 +13,7 @@ import sys
 from django.shortcuts import render
 from game.models import GameLog, UserGameLog
 from django.db.models import F
+from game.utils import RoomStateManager
 
 
 
@@ -20,29 +21,35 @@ ROOM_TIMEOUT = 3600  # 1 hour
 
 
 class GameRoomViewSet(viewsets.ViewSet):
-	
+	def __init__(self, **kwargs):
+		super().__init__(**kwargs)
+		self.room_manager = RoomStateManager()
 
 	def list(self, request):
 		print("list", sys.stderr)
 		"""모든 게임 방 목록을 반환합니다."""
-		game_room_datas = []
-		game_rooms_keys = cache.keys('game_room_*')
-		for room_key in game_rooms_keys:
-			room = cache.get(room_key)
-			# room에 플레이어가 없으면 삭제
-			if len(room['players']) == 0:
-				cache.delete(room_key)
-				continue
-			if room and not room['game_started'] and int(room['roomType'] != 3) and int(room['roomType']) != 4:
-				game_room_datas.append({
-					'id': room['id'],
-					'name': room['name'],
-					'roomType': room['roomType'],
-					'people': len(room['players']),
-					'created_at': room['created_at']
-				})
-		game_room_datas.sort(key=lambda x: x['created_at'], reverse=True)
-		return Response(game_room_datas, status=status.HTTP_200_OK)
+		@async_to_sync
+		async def async_list():
+			game_room_datas = []
+			game_rooms_keys = await sync_to_async(cache.keys)('game_room_*')
+			for room_key in game_rooms_keys:
+				room = await self.room_manager.get_room(room_key)
+				if not room:
+					continue
+				if len(room['players']) == 0 and room['roomType'] != 3 and room['roomType'] != 4:
+					await self.room_manager.remove_room(room_key)
+					continue
+				if room and not room['game_started'] and int(room['roomType'] != 3) and int(room['roomType']) != 4:
+					game_room_datas.append({
+						'id': room['id'],
+						'name': room['name'],
+						'roomType': room['roomType'],
+						'people': len(room['players']),
+						'created_at': room['created_at']
+					})
+			game_room_datas.sort(key=lambda x: x['created_at'], reverse=True)
+			return Response(game_room_datas, status=status.HTTP_200_OK)
+		return async_list()
 
 	def create(self, request):
 		print("create", sys.stderr)
@@ -60,59 +67,52 @@ class GameRoomViewSet(viewsets.ViewSet):
 			'game2': [],
 			'game1_ended': False,
 			'game2_ended': False,
-			'started_at': None
+			'started_at': None,
+			'version': 0  # 버전 추가
 		}
 		print("Room id:", room_id, sys.stderr)
-		cache.set(f'game_room_{room_id}', room_data, timeout=ROOM_TIMEOUT)
-		responseData = {"roomId": room_id}
-		response = Response(responseData, status=status.HTTP_201_CREATED)
-		# CookieManager.set_intra_id_cookie(response, 'dongkseo')
-		CookieManager.set_nickname_cookie(response, request.data.get('nickname'))
 		
-		return response
+		@async_to_sync
+		async def async_create():
+			await self.room_manager.set_room(f'game_room_{room_id}', room_data)
+			responseData = {"roomId": room_id}
+			response = Response(responseData, status=status.HTTP_201_CREATED)
+			CookieManager.set_nickname_cookie(response, request.data.get('nickname'))
+			return response
+			
+		return async_create()
 
 	@action(detail=True, methods=['post'])
 	def join(self, request):
-		
-		"""게임 방에 참가합니다."""
-		game_room_id = request.data.get('roomId')
-		print("game_room_id", game_room_id, sys.stderr)
-		nickname = request.data.get('nickname')
-		print("nickname", nickname, sys.stderr)
-		room = cache.get(f'game_room_{game_room_id}')
-		print("request.COOKIES", request.COOKIES, sys.stderr)
+		@async_to_sync
+		async def async_join():
+			game_room_id = request.data.get('roomId')
+			nickname = request.data.get('nickname')
+			
+			room = await self.room_manager.get_room(f'game_room_{game_room_id}')
+			if not room:
+				return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
+			if (room['roomType'] == 0 and len(room['players']) >= 2) or (room['roomType'] == 1 and len(room['players']) >= 4):
+				return Response({'error': 'Room is full'}, status=status.HTTP_400_BAD_REQUEST)
 
-		if not room:
-			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+			if any(player['nickname'] == nickname for player in room['players']):
+				return Response({'error': 'Nickname already exists'}, status=status.HTTP_400_BAD_REQUEST)
+			
+			intra_id = CookieManager.get_intra_id_from_cookie(request)
+			user = await sync_to_async(User.get_by_intra_id)(intra_id)
 
-		if (room['roomType'] == 0 and len(room['players']) >= 2) or (room['roomType'] == 1 and len(room['players']) >= 4):
-			return Response({'error': 'Room is full'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-		if any(player['nickname'] == nickname for player in room['players']):
-			return Response({'error': 'Nickname already exists'}, status=status.HTTP_400_BAD_REQUEST)
-		
-		intra_id = CookieManager.get_intra_id_from_cookie(request)
-		user = User.get_by_intra_id(intra_id)
-
-		print("user", user, sys.stderr)
-		
-		room['players'].append({'intraId':intra_id, 'nickname': nickname, 'profileImage': user.profile_image})
-		cache.set(f'game_room_{game_room_id}', room, timeout=ROOM_TIMEOUT)
-		# nickname 쿠키 설정
-		response = Response(status=status.HTTP_200_OK)
-		CookieManager.set_nickname_cookie(response, nickname)
-
-		channel_layer = get_channel_layer()
-		async_to_sync(channel_layer.group_send)(
-			f'game_{game_room_id}',
-			{
-				'type': 'room_update',
-				'data': room
+			update_data = {
+				'intraId': intra_id,
+				'nickname': nickname,
+				'profileImage': user.profile_image
 			}
-		)
-		return response
+
+			response = Response(status=status.HTTP_200_OK)
+			CookieManager.set_nickname_cookie(response, nickname)
+			return response
+
+		return async_join()
 
 	@action(detail=True, methods=['post'])
 	def start_game(self, request):

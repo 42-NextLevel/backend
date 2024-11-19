@@ -65,8 +65,6 @@ class SecurityMixin:
         return value
 
 class AuthCodeView(APIView, SecurityMixin):
-    """42 OAuth 인증 코드 처리 뷰"""
-    
     @rate_limit("42_auth", max_attempts=20, timeout=900)
     @transaction.atomic
     def post(self, request):
@@ -87,8 +85,28 @@ class AuthCodeView(APIView, SecurityMixin):
             
             user = self._get_or_create_user(intra_id, user_image)
 
+            # 사용자가 이미 등록되어 있는 경우 (이메일이 있는 경우)
+            if user.email:
+                try:
+                    auth_code = EmailManager.send_Auth_email(user.email)
+                    cache.set(f"auth_code_{intra_id}", auth_code, timeout=300)
+                    
+                    response = Response(
+                        {'registered': True}, 
+                        status=status.HTTP_200_OK
+                    )
+                    return CookieManager.set_intra_id_cookie(response, intra_id)
+                    
+                except BadHeaderError as e:
+                    logger.error(f"Email sending failed for user {intra_id}: {str(e)}")
+                    return Response(
+                        {'error': 'Failed to send authentication email'}, 
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            
+            # 새로운 사용자인 경우
             response = Response(
-                {'registered': bool(user.email)}, 
+                {'registered': False}, 
                 status=status.HTTP_200_OK
             )
             return CookieManager.set_intra_id_cookie(response, intra_id)

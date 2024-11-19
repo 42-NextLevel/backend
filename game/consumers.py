@@ -7,10 +7,17 @@ from typing import Dict, Any
 from api.models import User
 from urllib.parse import parse_qs
 import time
+from game.utils import RoomStateManager
 ROOM_TIMEOUT = 3600  # 1 hour
 import asyncio
 
 class GameConsumer(AsyncWebsocketConsumer):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.room_id = None
+		self.room_group_name = None
+		self.user_data = None
+		self.room_state_manager = RoomStateManager()
 	async def connect(self):
 		self.room_id = self.scope['url_route']['kwargs']['room_id']
 		self.room_group_name = f'room_{self.room_id}'
@@ -19,7 +26,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 		query_params = parse_qs(query_string)
 		
 		try:
-			room = await self.get_room()
+			room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
 			if not room:
 				print(f"WebSocket REJECT - Room not found: {self.room_id}", file=sys.stderr)
 				print(f"Cache key used: game_room_{self.room_id}", file=sys.stderr)
@@ -72,16 +79,15 @@ class GameConsumer(AsyncWebsocketConsumer):
 	async def disconnect(self, close_code):
 		try:
 			if hasattr(self, 'user_data'):
-				await self.update_room_players(add=False)
-			
+				result = await self.update_room_players(add=False)  # result 받기
+				
 			# room이 없는 경우 처리
-			room = await self.get_room()
+			room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
 			if not room:
 				await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 				return
 				
-			players = room.get('players', [])
-			match_type = int(room.get('match_type', '0'))
+			match_type = int(room.get('roomType', '0'))
 			
 			# tournament 게임(1, 2번 매치)에서 게임 시작 전 유저 나가면 destroy
 			if (match_type in [1, 2]) and not room['game_started']:
@@ -92,85 +98,76 @@ class GameConsumer(AsyncWebsocketConsumer):
 						'type': 'destroy'
 					}
 				)
-				await cache.delete(f'game_room_{self.room_id}')
+				await self.room_state_manager.remove_room_safely(self.room_id)
 				print(f"Deleted tournament room {self.room_id}", file=sys.stderr)
-				
 			# 일반 게임에서 모든 플레이어가 나가고 게임 시작 전이면 삭제
-			elif len(players) == 0 and not room['game_started']:
+			elif room and room.get('players') and len(room['players']) == 0 and not room['game_started']:
 				print(f"Empty room {self.room_id} deleted", file=sys.stderr)
-				await cache.delete(f'game_room_{self.room_id}')
+				await self.room_state_manager.remove_room_safely(self.room_id)
 				
 			await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 			
 		except Exception as e:
 			logger.error(f"Error in disconnect: {e}")
-			# 에러가 발생해도 반드시 group_discard는 실행
 			await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+
 
 	@database_sync_to_async
 	def get_user(self, intra_id: str):
 		return User.get_by_intra_id(intra_id)
 
-	@database_sync_to_async
-	def get_room(self) -> Dict[str, Any]:
-		return cache.get(f'game_room_{self.room_id}')
 
-	@database_sync_to_async
-	def set_room(self, room: Dict[str, Any]):
-		if room['host'] is None:
-			cache.delete(f'game_room_{self.room_id}')
-			print(f"Deleted room {self.room_id} due to host leaving", file=sys.stderr)
-		else:
-			cache.set(f'game_room_{self.room_id}', room, timeout=ROOM_TIMEOUT)
 
 	async def update_room_players(self, add: bool):
 		print(f"Updating room players: {add}", file=sys.stderr)
-		room = await self.get_room()
+		room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
 		if not room or room['game_started'] == True:
 			return
 
-		players = room.get('players', [])
-		print(f"Current players: {players}", file=sys.stderr)
-		room_type = int(room.get('roomType', 0))
-
+		result = None  # result 초기화
 		if add:
-			# 새로운 플레이어 추가
-			if len(players) == 0 and not room.get('host'):
-				room['host'] = self.user_data['nickname']
-
-			if self.user_data['intraId'] not in [p['intraId'] for p in players]:
-				players.append(self.user_data)
-
-			# 방 타입에 따른 플레이어 수 제한
-			if len(players) == 4:
-				game1 = [players[0], players[1]]
-				game2 = [players[2], players[3]]
-				room['game1'] = game1
-				room['game2'] = game2
-
+			result = await self.room_state_manager.apply_update_safely(
+				f'game_room_{self.room_id}',
+				'add_player',
+				self.user_data
+			)
+			
+			# 4명이 되면 game1, game2 설정
+			if result and len(result['players']) == 4:
+				game_setup = {
+					'game1': [result['players'][0], result['players'][1]],
+					'game2': [result['players'][2], result['players'][3]]
+				}
+				await self.room_state_manager.apply_update_safely(
+					f'game_room_{self.room_id}',
+					'update_game_state',
+					game_setup
+				)
 		else:
 			# 플레이어 제거
-			players = [p for p in players if p['intraId'] != self.user_data['intraId']]
-			print(f"Removed player {self.user_data['nickname']} from room {self.room_id}", file=sys.stderr)
+			result = await self.room_state_manager.apply_update_safely(
+				f'game_room_{self.room_id}',
+				'remove_player',
+				self.user_data
+			)
+			print(f"Player removed: {result}", file=sys.stderr)
 			
-			# 호스트 변경 처리
-			if room['host'] == self.user_data['nickname']:
-				if players:
-					print(f"Changing host from {self.user_data['nickname']} to {players[0]['nickname']}", file=sys.stderr)
-					room['host'] = players[0]['nickname']
-				else:
-					room['host'] = None
-					# 토너먼트 final/3rd place 방은 유지
-					if room_type not in [3, 4]:
-						print(f"Deleting normal room {self.room_id} - no players left", file=sys.stderr)
-						await self.set_room({'host': None})
-						return
-					else:
-						print(f"Keeping tournament room {self.room_id} alive despite no players", file=sys.stderr)
-
-		room['players'] = players
-		await self.set_room(room)
-		await self.broadcast_room_update(room)
+			# 토너먼트 방 처리
+			if result and not result.get('players'):  # 플레이어가 없는 경우
+				room_type = int(room.get('roomType', 0))
+				if room_type not in [3, 4]:  # 일반 방
+					print(f"Deleting normal room {self.room_id} - no players left", file=sys.stderr)
+					await self.room_state_manager.remove_room_safely(self.room_id)
+					return
+				else:  # 토너먼트 방
+					print(f"Keeping tournament room {self.room_id} alive despite no players", file=sys.stderr)
+		
+		# 업데이트된 방 정보 브로드캐스트
+		updated_room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
+		print(f"Updated room: {updated_room}", file=sys.stderr)
+		if updated_room:
+			await self.broadcast_room_update(updated_room)
+		return result  # result 반환
 
 	async def broadcast_room_update(self, room: Dict[str, Any]):
 		await self.channel_layer.group_send(
@@ -580,6 +577,7 @@ from datetime import datetime
 class GamePingPongConsumer(AsyncWebsocketConsumer):
 	def __init__(self):
 		super().__init__()
+		self.room_state_manager = RoomStateManager()
 		self.PLAYER_ASSIGN_EVENT = 0
 		self.GAME_START_EVENT = 1
 		self.GAME_STATE_UPDATE_EVENT = 2
@@ -826,19 +824,19 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			if self.match == '0' or self.match == '3' or self.match == '4':
 				return
 				
-			room_final = await cache.aget(f'game_room_{self.game_id}_final')
+			room_final = await self.room_state_manager.get_room(f'game_room_{self.game_id}_final')
 			if room_final:
 				num_disconnected = int(room_final.get('disconnected', 0))
 				if num_disconnected > 0:
-					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_final')
+					await self.room_state_manager.remove_room_safely(f'game_room_{self.game_id}_final')
 					print(f"Final room deleted due to 2 players disconnecting", file=sys.stderr)
 				else:
 					room_final['disconnected'] = num_disconnected + 1
 					try:
-						await sync_to_async(cache.set)(
+						await self.room_state_manager.apply_update_safely(
 							f'game_room_{self.game_id}_final', 
+							'update_game_state',
 							room_final, 
-							timeout=ROOM_TIMEOUT
 						)
 					except Exception as e:
 						logger.error(f"Cache set error in final room: {e}")
@@ -1017,19 +1015,19 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if len(self.game_state['disconnected_player']) == 1:
 			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
 			print("Handling 3rd room disconnect", file=sys.stderr)
-			room_3rd = await sync_to_async(cache.get)(f'game_room_{self.game_id}_3rd')
+			room_3rd = await self.room_state_manager.get_room(f'game_room_{self.game_id}_3rd')
 			if room_3rd:
 				num_disconnected = int(room_3rd.get('disconnected', 0))
 				if num_disconnected > 0:
-					await sync_to_async(cache.delete)(f'game_room_{self.game_id}_3rd')
+					await self.room_state_manager.remove_room_safely(f'game_room_{self.game_id}_3rd')
 					print(f"3rd room deleted due to 1 player disconnecting", file=sys.stderr)
 				else:
 					room_3rd['disconnected'] = num_disconnected + 1
 					try:
-						await sync_to_async(cache.set)(
-							f'game_room_{self.game_id}_3rd', 
+						await self.room_state_manager.apply_update_safely(
+							f'game_room_{self.game_id}_3rd',
+							'update_game_state',
 							room_3rd, 
-							timeout=ROOM_TIMEOUT
 						)
 					except Exception as e:
 						logger.error(f"Cache set error in 3rd room: {e}")
@@ -1105,11 +1103,11 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if room_type == 1 or room_type == 2:
 			room[f'game{room_type}_ended'] = True
 			if room.get('game1_ended', False) and room.get('game2_ended', False):
-				cache.delete(f'game_room_{room_id}')
+				self.room_state_manager.remove_room_safely(f'game_room_{room_id}')
 				print(f"Room {room_id} deleted", file=sys.stderr)
-			cache.set(f'game_room_{room_id}', room)
+			self.room_state_manager.apply_update_safely(f'game_room_{room_id}', 'update_game_state', room)
 		else:
-			cache.delete(f'game_room_{room_id}')
+			self.room_state_manager.remove_room_safely(f'game_room_{room_id}')
 			print(f"Room {room_id} deleted", file=sys.stderr)
 
 	async def save_game_log(self, winner):
@@ -1121,7 +1119,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		room_id = '_'.join(self.game_id.split('_')[:-1])
 		print(f"Room ID: {room_id}", file=sys.stderr)
 		
-		room = await sync_to_async(cache.get)(f'game_room_{room_id}')
+		room = await self.room_state_manager.get_room(f'game_room_{room_id}')
 		if not room:
 			print(f"Room {room_id} not found", file=sys.stderr)
 			return
