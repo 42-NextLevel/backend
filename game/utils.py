@@ -111,7 +111,7 @@ class RoomStateManager:
 	async def apply_update_safely(self, room_id: str, update_type: str, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 		"""안전한 업데이트 적용"""
 		async def perform_update(current_room: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-			if current_room is None or current_room.get('host') is None:
+			if current_room is None or (current_room.get('host') is None and current_room.get('roomType') not in [3, 4]):
 				logger.debug(f"No valid room found for room_id {room_id}")
 				return None
 
