@@ -1171,7 +1171,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
 			
 			# 블록체인 저장
-			asyncio.create_task(self.save_blockchain_data(players))
+			# asyncio.create_task(self.save_blockchain_data(players))
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
 			# 캐시 처리

@@ -166,7 +166,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'disconnected': 0,
 				'version': 0  # version 필드 추가
 			}
-			cache.set(f'game_room_{room_id}', room1, timeout=ROOM_TIMEOUT)
+			self.room_manager.set_room(f'game_room_{room_id}', room1)
 			room_id = roomId + '_3rd'
 			room2 = {
 				'id': room_id,
@@ -184,7 +184,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'disconnected': 0,
 				'version': 0  # version 필드 추가
 			}
-			cache.set(f'game_room_{room_id}', room2, timeout=ROOM_TIMEOUT)
+			self.room_manager.set_room(f'game_room_{room_id}', room2)
 		
 		return Response(status=status.HTTP_200_OK)
 	

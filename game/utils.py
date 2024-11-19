@@ -5,6 +5,7 @@ from django.core.cache import cache
 from asgiref.sync import sync_to_async
 import logging
 import random
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,8 @@ class RoomStateManager:
 			room_id = str(room_id.get('id', ''))
 			
 		result = await sync_to_async(cache.get)(room_id)
+		print("room_id", room_id, file=sys.stderr)
+		print(result, file=sys.stderr)
 		return result
 
 	async def set_room(self, room_id: str, room: Dict[str, Any]):
