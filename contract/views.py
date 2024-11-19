@@ -29,13 +29,6 @@ def get_contract_info(request, game_id):
 			history['startTime'] = datetime.fromtimestamp(history['startTime']).strftime('%Y-%m-%d %H:%M:%S')
 		
 		return JsonResponse(history)
-		
-	except TransactionNotFound:
-		return JsonResponse({
-			'status': 'not_found',
-			'message': 'Game information not found'
-		}, status=404)
-		
 	except Exception as e:
 		return JsonResponse({
 			'status': 'error',
