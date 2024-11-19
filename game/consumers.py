@@ -1055,7 +1055,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 				
 				def sync_blockchain_operations():
 					web3_client = Web3Client()
-					start_time = datetime.fromtimestamp(self.game_state['start_time'] / 1000)
+					room = self.room_state_manager.get_room(f'game_room_{self.game_id}')
+					start_time = room.get('started_at', datetime.now())
 					
 					match_info = web3_client.make_match_struct(
 						start_time=start_time,
