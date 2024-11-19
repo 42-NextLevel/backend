@@ -27,7 +27,7 @@ def get_contract_info(request, game_id):
 		# 정상적인 데이터인 경우
 		if history['startTime']:  # Unix timestamp인 경우
 			history['startTime'] = datetime.fromtimestamp(history['startTime']).strftime('%Y-%m-%d %H:%M:%S')
-		
+			history['status'] = 'OK'
 		return JsonResponse(history)
 	except Exception as e:
 		return JsonResponse({
