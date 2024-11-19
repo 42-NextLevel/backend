@@ -31,8 +31,6 @@ class RoomStateManager:
 			room_id = str(room_id.get('id', ''))
 			
 		result = await sync_to_async(cache.get)(room_id)
-		print("room_id", room_id, file=sys.stderr)
-		print(result, file=sys.stderr)
 		return result
 
 	async def set_room(self, room_id: str, room: Dict[str, Any]):
@@ -40,6 +38,9 @@ class RoomStateManager:
 		# room_id가 딕셔너리인 경우 문자열로 변환
 		if isinstance(room_id, dict):
 			room_id = str(room_id.get('id', ''))
+		if  (room['roomType'] == 3 or room['roomType'] == 4) and room['version'] == 0:
+			await sync_to_async(cache.set)(room_id, room)
+			return
 			
 		if room['host'] is None:
 			await sync_to_async(cache.delete)(room_id)

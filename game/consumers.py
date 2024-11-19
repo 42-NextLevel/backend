@@ -1052,7 +1052,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 			# Web3Client는 동기적 초기화
 			web3_client = Web3Client()  # sync_to_async 제거
-			start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+			start_time = datetime.fromtimestamp(self.game_state['start_time'] / 1000)
 			
 			# make_match_struct는 동기 함수이므로 sync_to_async 사용
 			match_info = await sync_to_async(web3_client.make_match_struct)(

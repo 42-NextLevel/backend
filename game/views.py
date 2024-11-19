@@ -167,6 +167,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'version': 0  # version 필드 추가
 			}
 			self.room_manager.set_room(f'game_room_{room_id}', room1)
+			print("room1", room1, sys.stderr)
 			room_id = roomId + '_3rd'
 			room2 = {
 				'id': room_id,
