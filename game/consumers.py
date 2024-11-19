@@ -573,11 +573,16 @@ class GameScoreHandler:
 
 
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+import os
+import traceback
+
 
 class GamePingPongConsumer(AsyncWebsocketConsumer):
 	def __init__(self):
 		super().__init__()
 		self.room_state_manager = RoomStateManager()
+		self.executor = ThreadPoolExecutor(max_workers=4)
 		self.PLAYER_ASSIGN_EVENT = 0
 		self.GAME_START_EVENT = 1
 		self.GAME_STATE_UPDATE_EVENT = 2
@@ -1036,46 +1041,45 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	
 	async def save_blockchain_data(self, players):
-		from contract.solidity.scripts.Web3Client import Web3Client
-		from asgiref.sync import sync_to_async
-		import os
+		loop = asyncio.get_event_loop()
 		
-		try:
-			# 환경 변수 확인
-			if not os.environ.get('ETHEREUM_PRIVATE_KEY') or not os.environ.get('WEB3_PROVIDER_URL'):
-				print("Missing required environment variables", file=sys.stderr)
+		async def _blockchain_save():
+			from contract.solidity.scripts.Web3Client import Web3Client
+			
+			try:
+				if not os.environ.get('ETHEREUM_PRIVATE_KEY') or not os.environ.get('WEB3_PROVIDER_URL'):
+					print("Missing required environment variables", file=sys.stderr)
+					return None
+
+				game_id = await sync_to_async(lambda: GameLog.objects.latest('id').id)()
+				
+				def sync_blockchain_operations():
+					web3_client = Web3Client()
+					start_time = datetime.fromtimestamp(self.game_state['start_time'] / 1000)
+					
+					match_info = web3_client.make_match_struct(
+						start_time=start_time,
+						match_type=int(self.match),
+						user1=str(players[0]['intraId']),
+						user2=str(players[1]['intraId']), 
+						nick1=str(players[0]['nickname']),
+						nick2=str(players[1]['nickname']),
+						score1=int(self.game_state['score']['player1']),
+						score2=int(self.game_state['score']['player2'])
+					)
+					return web3_client, match_info
+
+				web3_client, match_info = await loop.run_in_executor(self.executor, sync_blockchain_operations)
+				tx_hash = await web3_client.add_match_history(game_id, match_info)
+				print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
+				return tx_hash
+
+			except Exception as e:
+				print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
+				traceback.print_exc(file=sys.stderr)
 				return None
 
-			# GameLog.objects.latest('id') 호출을 sync_to_async로 래핑
-			get_latest_id = sync_to_async(lambda: GameLog.objects.latest('id').id)
-			game_id = await get_latest_id()
-
-			# Web3Client는 동기적 초기화
-			web3_client = Web3Client()  # sync_to_async 제거
-			start_time = datetime.fromtimestamp(self.game_state['start_time'] / 1000)
-			
-			# make_match_struct는 동기 함수이므로 sync_to_async 사용
-			match_info = await sync_to_async(web3_client.make_match_struct)(
-				start_time=start_time,
-				match_type=int(self.match),
-				user1=str(players[0]['intraId']),
-				user2=str(players[1]['intraId']),
-				nick1=str(players[0]['nickname']),
-				nick2=str(players[1]['nickname']),
-				score1=int(self.game_state['score']['player1']),
-				score2=int(self.game_state['score']['player2'])
-			)
-
-			# add_match_history는 이미 async 함수이므로 직접 await
-			tx_hash = await web3_client.add_match_history(game_id, match_info)
-			print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
-			return tx_hash
-
-		except Exception as e:
-			print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
-			import traceback
-			traceback.print_exc(file=sys.stderr)
-			return None
+		return await _blockchain_save()
 
 	@sync_to_async
 	def create_game_log(self, start_time, match_type):
@@ -1171,7 +1175,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
 			
 			# 블록체인 저장
-			# asyncio.create_task(self.save_blockchain_data(players))
+			loop = asyncio.get_event_loop()
+			loop.create_task(self.save_blockchain_data(players))
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
 			# 캐시 처리
