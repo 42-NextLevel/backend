@@ -14,6 +14,7 @@ from django.shortcuts import render
 from game.models import GameLog, UserGameLog
 from django.db.models import F
 from game.utils import RoomStateManager
+import re
 
 
 
@@ -24,6 +25,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 	def __init__(self, **kwargs):
 		super().__init__(**kwargs)
 		self.room_manager = RoomStateManager()
+		self.NICKNAME_PATTERN = re.compile(r'^[a-zA-Z0-9가-힣]*$')
 
 	def list(self, request):
 		print("list", sys.stderr)
@@ -52,24 +54,41 @@ class GameRoomViewSet(viewsets.ViewSet):
 		return async_list()
 
 	def create(self, request):
-		print("create", sys.stderr)
-		"""새로운 게임 방을 생성합니다."""
+		nickname = request.data.get('nickname')
+		room_name = request.data.get('name')
+		
+		if not nickname or len(nickname) < 2 or len(nickname) > 10:
+			return Response({'error': '닉네임은 2-10자 사이여야 합니다'}, status=status.HTTP_400_BAD_REQUEST)
+			
+		if not self.NICKNAME_PATTERN.match(nickname):
+			return Response({'error': '닉네임은 한글, 영문, 숫자만 사용할 수 있습니다'}, status=status.HTTP_400_BAD_REQUEST)
+
+		if not room_name or len(room_name) < 2 or len(room_name) > 10:
+			return Response({'error': '방 이름은 2-10자 사이여야 합니다'}, status=status.HTTP_400_BAD_REQUEST)
+		
+		# 공백으로만 이루어진 방 이름은 허용하지 않음
+		if not room_name.strip():
+			return Response({'error': '방 이름은 공백으로만 이루어질 수 없습니다'}, status=status.HTTP_400_BAD_REQUEST )
+		# 닉네임에는 공백이 들어갈 수 없음
+		if ' ' in nickname:
+			return Response({'error': '닉네임에는 공백이 들어갈 수 없습니다'}, status=status.HTTP_400_BAD_REQUEST)
+
 		room_id = str(uuid.uuid4())
 		room_data = {
 			'id': room_id,
-			'name': request.data.get('name'),
+			'name': room_name,
 			'roomType': request.data.get('roomType'),
 			'players': [],
-			'host': request.data.get('nickname'),
+			'host': nickname,
 			'game_started': False,
-			'created_at': time.time() + (9 * 3600),  # 한국 시간
+			'created_at': time.time() + (9 * 3600),
 			'game1': [],
 			'game2': [],
 			'game1_ended': False,
 			'game2_ended': False,
 			'started_at': None,
 			'disconnected': 0,
-			'version': 0  # 버전 추가
+			'version': 0
 		}
 		print("Room id:", room_id, sys.stderr)
 		
@@ -78,7 +97,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			await self.room_manager.set_room(f'game_room_{room_id}', room_data)
 			responseData = {"roomId": room_id}
 			response = Response(responseData, status=status.HTTP_201_CREATED)
-			CookieManager.set_nickname_cookie(response, request.data.get('nickname'))
+			CookieManager.set_nickname_cookie(response, nickname)
 			return response
 			
 		return async_create()
@@ -89,6 +108,11 @@ class GameRoomViewSet(viewsets.ViewSet):
 		async def async_join():
 			game_room_id = request.data.get('roomId')
 			nickname = request.data.get('nickname')
+			if not nickname or len(nickname) < 2 or len(nickname) > 10:
+				return Response({'error': '닉네임은 2-10자 사이여야 합니다'}, status=status.HTTP_400_BAD_REQUEST)
+
+			if not self.NICKNAME_PATTERN.match(nickname):
+				return Response({'error': '닉네임은 한글, 영문, 숫자만 사용할 수 있습니다'}, status=status.HTTP_400_BAD_REQUEST)
 			
 			room = await self.room_manager.get_room(f'game_room_{game_room_id}')
 			if not room:
@@ -102,12 +126,6 @@ class GameRoomViewSet(viewsets.ViewSet):
 			
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
 			user = await sync_to_async(User.get_by_intra_id)(intra_id)
-
-			update_data = {
-				'intraId': intra_id,
-				'nickname': nickname,
-				'profileImage': user.profile_image
-			}
 
 			response = Response(status=status.HTTP_200_OK)
 			CookieManager.set_nickname_cookie(response, nickname)
