@@ -138,15 +138,6 @@ class GameRoomViewSet(viewsets.ViewSet):
 		room['game_started'] = True
 		room['started_at'] = time.time() + (9 * 3600)  # 9시간을 초 단위로 추가
 		cache.set(f'game_room_{roomId}', room, timeout=ROOM_TIMEOUT)
-
-		channel_layer = get_channel_layer()
-		async_to_sync(channel_layer.group_send)(
-			f'room_{roomId}',
-			{
-				'type': 'game_start',
-				'data': room
-			}
-		)
 		# 만약 토너면트 라면 패자 룸 승사 룸 생성 
 		roomType = room['roomType']
 		if roomType == 1: # 토너먼트
@@ -167,6 +158,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'disconnected': 0,
 				'version': 0  # version 필드 추가
 			}
+			print("Room ID for final:", room_id, sys.stderr)
 			self.room_manager.set_room(f'game_room_{room_id}', room1)
 			print("room1", room1, sys.stderr)
 			room_id = roomId + '_3rd'
@@ -186,7 +178,18 @@ class GameRoomViewSet(viewsets.ViewSet):
 				'disconnected': 0,
 				'version': 0  # version 필드 추가
 			}
+			print("Room ID for 3rd:", room_id, sys.stderr)
 			self.room_manager.set_room(f'game_room_{room_id}', room2)
+
+		channel_layer = get_channel_layer()
+		async_to_sync(channel_layer.group_send)(
+			f'room_{roomId}',
+			{
+				'type': 'game_start',
+				'data': room
+			}
+		)
+		
 		
 		return Response(status=status.HTTP_200_OK)
 	
