@@ -116,7 +116,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			
 			room = await self.room_manager.get_room(f'game_room_{game_room_id}')
 			if not room:
-				return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+				return Response({'error': '방을 찾을 수 없습니다'}, status=status.HTTP_404_NOT_FOUND)
 
 			if (room['roomType'] == 0 and len(room['players']) >= 2) or (room['roomType'] == 1 and len(room['players']) >= 4):
 				return Response({'error': '방이 꽉 찼습니다'}, status=status.HTTP_400_BAD_REQUEST)
