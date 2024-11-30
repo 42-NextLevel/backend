@@ -119,10 +119,10 @@ class GameRoomViewSet(viewsets.ViewSet):
 				return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
 
 			if (room['roomType'] == 0 and len(room['players']) >= 2) or (room['roomType'] == 1 and len(room['players']) >= 4):
-				return Response({'error': 'Room is full'}, status=status.HTTP_400_BAD_REQUEST)
+				return Response({'error': '방이 꽉 찼습니다'}, status=status.HTTP_400_BAD_REQUEST)
 
 			if any(player['nickname'] == nickname for player in room['players']):
-				return Response({'error': 'Nickname already exists'}, status=status.HTTP_400_BAD_REQUEST)
+				return Response({'error': '다른 닉네임을 사용해주세요'}, status=status.HTTP_400_BAD_REQUEST)
 			
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
 			user = await sync_to_async(User.get_by_intra_id)(intra_id)
