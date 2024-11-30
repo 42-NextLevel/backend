@@ -991,18 +991,19 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if self.backup_task:
 			self.backup_task.cancel()
 		
+		# 비동기로 처리하여 blocking 방지
+		asyncio.create_task(self.handle_game_end_cleanup(event))
+
+	async def handle_game_end_cleanup(self, event):
 		game_cache_key = f'game_status_{self.game_id}'
 		await sync_to_async(cache.set)(game_cache_key, False, timeout=180)
-		print(f"Game {self.game_id} ended. Winner: {event['winner']}", file=sys.stderr)
-
 		
-		# 게임 로그 저장
-		print(f"Game {self.game_id} ended. Winner: {event['winner']}", file=sys.stderr)
-		await self.handle_deserter(event)
-		await self.save_game_log(event['winner'])
+		# 게임 로그 저장 등의 작업을 별도 태스크로
+		if self.player_number == event['winner']:  # 승자만 저장 작업 수행
+			await self.handle_deserter(event)
+			await self.save_game_log(event['winner'])
 		
-		logger.info(f"Game {self.game_id} ended. Winner: {event['winner']}")
-		
+		# 8초 대기 후 cleanup
 		await asyncio.sleep(8)
 		GameState.remove_game(self.game_id)
 
