@@ -71,12 +71,21 @@ class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 			await self.channel_layer.group_add(self.room_group_name, self.channel_name)
 			await self.accept()
 			await self.update_room_players(add=True)
+
+
+			self.update_task = asyncio.create_task(self.periodic_room_update())
 		except Exception as e:
 			print(f"WebSocket REJECT - Error in final connection steps: {e}", file=sys.stderr)
 			await self.close()
 			return
 
 	async def disconnect(self, close_code):
+		if self.update_task:
+			self.update_task.cancel()
+		try:
+			await self.update_task
+		except asyncio.CancelledError:
+			pass
 		try:
 			if hasattr(self, 'user_data'):
 				result = await self.update_room_players(add=False)  # result 받기
@@ -187,6 +196,19 @@ class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 			'type': 'game_start',
 			'data': event['data']
 		}))
+
+	async def periodic_room_update(self):
+		while True:
+			try:
+				room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
+				if room:
+					await self.broadcast_room_update(room)
+				await asyncio.sleep(1)  # Update every second
+			except asyncio.CancelledError:
+				break
+			except Exception as e:
+				print(f"Error in periodic update: {e}", file=sys.stderr)
+				await asyncio.sleep(1)  # Continue updates even if there's an error
 
 
 
