@@ -40,7 +40,7 @@ contract PongHistory {
 
     function addHistory(uint16 gameId, MatchInfo memory info) external onlyAdmin {
         require(info.startTime > 0, "Invalid start time");
-        require(info.startTime <= block.timestamp, "Start time cannot be in the future");
+        // require(info.startTime <= block.timestamp, "Start time cannot be in the future");
         table[gameId] = info;
     }
 
