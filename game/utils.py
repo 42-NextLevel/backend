@@ -125,8 +125,8 @@ class RoomStateManager:
 						'nickname': update_data['nickname'],
 						'profileImage': update_data['profileImage']
 					}
-					# if player_data['intraId'] not in [p['intraId'] for p in updated_room.get('players', [])]:
-					updated_room.setdefault('players', []).append(player_data)
+					if player_data['intraId'] not in [p['intraId'] for p in updated_room.get('players', [])]:
+						updated_room.setdefault('players', []).append(player_data)
 					if not updated_room.get('host'):
 						updated_room['host'] = player_data['nickname']
 							
