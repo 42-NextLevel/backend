@@ -202,11 +202,12 @@ class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 			try:
 				room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
 				if room:
+					print(f"Periodic room update: {room}", file=sys.stderr)
 					await self.broadcast_room_update(room)
 				else:
 					roomType = room['roomType']
 					if roomType == 3 or roomType == 4:
-						await self.send_destroy_event(
+						self.send_destroy_event(
 							room_id=self.room_id,
 							reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
 						)
@@ -218,6 +219,22 @@ class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 			except Exception as e:
 				print(f"Error in periodic update: {e}", file=sys.stderr)
 				await asyncio.sleep(1)  # Continue updates even if there's an error
+
+
+	async def send_destroy_event(self, reason: str):
+		await self.channel_layer.group_send(
+			self.room_group_name,
+			{
+				'type': 'room_destroy',
+				'reason': reason
+			}
+		)
+
+	async def room_destroy(self, event):
+		await self.send(text_data=json.dumps({
+			'type': 'room_destroy',
+			'reason': event['reason']
+		}))
 
 
 
@@ -853,7 +870,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 			room_final = await self.room_state_manager.get_room(f'game_room_{self.game_id}_final')
 			if room_final:
 				num_disconnected = int(room_final.get('disconnected', 0))
-				if num_disconnected > 1:
+				if num_disconnected > 0:
 					await self.room_state_manager.remove_room_safely(f'game_room_{self.game_id}_final')
 					print(f"Final room deleted due to 2 players disconnecting", file=sys.stderr)
 				else:
@@ -862,16 +879,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 						await self.room_state_manager.apply_update_safely(
 							f'game_room_{self.game_id}_final', 
 							'update_game_state',
-							room_final, 
+							room_final,
 						)
 					except Exception as e:
 						logger.error(f"Cache set error in final room: {e}")
-				
-				# send_to_room_socket 호출 수정
-				await self.send_destroy_event(
-					f'game_room_{self.game_id}_final',
-					reason='한 게임에서 2명의 플레이어가 탈주하여 게임이 종료되었습니다.'
-				)
 		
 		
 
@@ -1041,6 +1052,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 			room_3rd = await self.room_state_manager.get_room(f'game_room_{self.game_id}_3rd')
 			if room_3rd:
 				num_disconnected = int(room_3rd.get('disconnected', 0))
+				print(f"Num disconnected in 3rd room: {num_disconnected}", file=sys.stderr)
 				if num_disconnected > 0:
 					await self.room_state_manager.remove_room_safely(f'game_room_{self.game_id}_3rd')
 					print(f"3rd room deleted due to 1 player disconnecting", file=sys.stderr)
@@ -1054,10 +1066,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 						)
 					except Exception as e:
 						logger.error(f"Cache set error in 3rd room: {e}")
-			await self.send_destroy_event(
-                room_id=f'game_room_{self.game_id}_3rd',
-                reason="탈주자가 있어 더이상 진행할 수 없습니다."
-            )
 		
 
 	
