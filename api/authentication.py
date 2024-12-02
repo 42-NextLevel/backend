@@ -14,6 +14,8 @@ class CustomJWTAuthentication(BaseAuthentication):
 		#     return None
 
 		try:
+			if not auth_header:
+				raise AuthenticationFailed('No token provided')
 			access_token = auth_header.split(' ')[1]
 			payload = AccessToken(access_token)
 			intra_id = payload['intra_id']
