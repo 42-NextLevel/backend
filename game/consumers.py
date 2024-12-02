@@ -1042,10 +1042,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 			game_id = await sync_to_async(lambda: GameLog.objects.latest('id').id)()
 			
-			
+
 			def sync_blockchain_operations():
 				web3_client = Web3Client()
-				start_time = datetime.fromtimestamp(room_copy['started_at']).strftime('%Y-%m-%d %H:%M:%S')  # datetime을 str로 변환
+				start_time = datetime.fromtimestamp(room_copy['started_at'], tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')  # datetime을 str로 변환
 
 				
 				match_info = web3_client.make_match_struct(
