@@ -7,10 +7,9 @@ from typing import Dict, Any
 from api.models import User
 from urllib.parse import parse_qs
 import time
-from game.utils import RoomStateManager
+from game.utils import RoomStateManager, WebsocketEventMixin
 ROOM_TIMEOUT = 3600  # 1 hour
 import asyncio
-from utils import WebsocketEventMixin
 
 class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 	def __init__(self, *args, **kwargs):
