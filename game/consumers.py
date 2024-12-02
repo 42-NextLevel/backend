@@ -73,7 +73,6 @@ class GameConsumer(AsyncWebsocketConsumer):
 			await self.update_room_players(add=True)
 
 
-			self.update_task = asyncio.create_task(self.periodic_room_update())
 		except Exception as e:
 			print(f"WebSocket REJECT - Error in final connection steps: {e}", file=sys.stderr)
 			await self.close()
@@ -196,29 +195,6 @@ class GameConsumer(AsyncWebsocketConsumer):
 			'type': 'game_start',
 			'data': event['data']
 		}))
-
-	async def periodic_room_update(self):
-		while True:
-			try:
-				room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
-				if room:
-					print(f"Periodic room update: {room}", file=sys.stderr)
-					await self.broadcast_room_update(room)
-				else:
-					roomType = room['roomType']
-					if roomType == 3 or roomType == 4:
-						self.send_destroy_event(
-							room_id=self.room_id,
-							reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
-						)
-					await self.close()
-					break
-				await asyncio.sleep(1)  # Update every second
-			except asyncio.CancelledError:
-				break
-			except Exception as e:
-				print(f"Error in periodic update: {e}", file=sys.stderr)
-				await asyncio.sleep(1)  # Continue updates even if there's an error
 
 
 	async def send_destroy_event(self, reason: str):
