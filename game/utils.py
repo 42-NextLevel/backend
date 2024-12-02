@@ -6,6 +6,7 @@ from asgiref.sync import sync_to_async
 import logging
 import random
 import sys
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -183,3 +184,55 @@ class RoomStateManager:
 
 		result = await self.update_room_with_retry(room_id, delete_room)
 		return result is not None
+	
+
+
+class WebsocketEventMixin:
+	"""
+	웹소켓 이벤트 전송을 위한 공통 메서드를 제공하는 Mixin
+	"""
+	async def send_to_room_socket(self, room_id, event_type, data):
+		"""
+		룸 소켓으로 메시지 전송
+		
+		Args:
+			room_id (str): 대상 룸 ID
+			event_type (str): 이벤트 타입
+			data (dict): 전송할 데이터
+		"""
+		try:
+			print(f"Sending {event_type} event to room {room_id}", file=sys.stderr)
+			room_group_name = f'room_{room_id}'
+
+			# 해당 그룹에 join
+			await self.channel_layer.group_add(room_group_name, self.channel_name)
+			
+			# 메시지 전송
+			await self.channel_layer.group_send(
+				room_group_name,
+				{
+					'type': event_type,
+					**data
+				}
+			)
+
+			# 메시지 전송 후 그룹에서 leave
+			await self.channel_layer.group_discard(room_group_name, self.channel_name)
+		
+		except Exception as e:
+			logger.error(f"Error sending to room socket: {e}")
+
+	async def send_destroy_event(self, room_id, reason):
+		"""
+		destroy 이벤트 전송을 위한 통일된 메서드
+		
+		Args:
+			room_id (str): 대상 룸 ID
+			reason (str): 파괴 사유
+			additional_data (dict, optional): 추가 데이터
+		"""
+		data = {
+			'type': 'destroy',
+			'data': reason,
+		}
+		await self.send_to_room_socket(room_id, 'destroy', data)
