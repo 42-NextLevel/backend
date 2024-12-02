@@ -203,6 +203,15 @@ class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 				room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
 				if room:
 					await self.broadcast_room_update(room)
+				else:
+					roomType = room['roomType']
+					if roomType == 3 or roomType == 4:
+						await self.send_destroy_event(
+							room_id=self.room_id,
+							reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
+						)
+					await self.close()
+					break
 				await asyncio.sleep(1)  # Update every second
 			except asyncio.CancelledError:
 				break
