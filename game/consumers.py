@@ -90,8 +90,8 @@ class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
 				
 			match_type = int(room.get('roomType', '0'))
 			
-			# tournament 게임(1, 2번 매치)에서 게임 시작 전 유저 나가면 destroy
-			if (match_type in [1, 2]) and not room['game_started']:
+			# tournament 게임(3, 4번 매치)에서 게임 시작 전 유저 나가면 destroy
+			if (match_type in [3, 4]) and not room['game_started']:
 				await self.send_destroy_event(
 					room_id=self.room_id,
 					reason="플레어아가 나갔기 때문에 더 이상 진행할 수 없습니다.",
