@@ -7,11 +7,11 @@ from typing import Dict, Any
 from api.models import User
 from urllib.parse import parse_qs
 import time
-from game.utils import RoomStateManager, WebsocketEventMixin
+from game.utils import RoomStateManager
 ROOM_TIMEOUT = 3600  # 1 hour
 import asyncio
 
-class GameConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
+class GameConsumer(AsyncWebsocketConsumer):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.room_id = None
@@ -616,7 +616,7 @@ import os
 import traceback
 
 
-class GamePingPongConsumer(AsyncWebsocketConsumer, WebsocketEventMixin):
+class GamePingPongConsumer(AsyncWebsocketConsumer):
 	def __init__(self):
 		super().__init__()
 		self.room_state_manager = RoomStateManager()
