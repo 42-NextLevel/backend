@@ -123,12 +123,12 @@ class GameRoomViewSet(viewsets.ViewSet):
 			if (room['roomType'] == 0 and len(room['players']) >= 2) or (room['roomType'] == 1 and len(room['players']) >= 4):
 				return Response({'error': '방이 꽉 찼습니다'}, status=status.HTTP_400_BAD_REQUEST)
 
-			# if any(player['nickname'] == nickname for player in room['players']):
-			# 	return Response({'error': '다른 닉네임을 사용해주세요'}, status=status.HTTP_400_BAD_REQUEST)
+			if any(player['nickname'] == nickname for player in room['players']):
+				return Response({'error': '다른 닉네임을 사용해주세요'}, status=status.HTTP_400_BAD_REQUEST)
 			
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
-			if any(player['intraId'] == intra_id for player in room['players']):
-				return Response({'error': '이미 방에 참가하셨습니다'}, status=status.HTTP_400_BAD_REQUEST)
+			# if any(player['intraId'] == intra_id for player in room['players']):
+				# return Response({'error': '이미 방에 참가하셨습니다'}, status=status.HTTP_400_BAD_REQUEST)
 			user = await sync_to_async(User.get_by_intra_id)(intra_id)
 
 			response = Response(status=status.HTTP_200_OK)
@@ -154,7 +154,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 			room['started_at'] = time.time() + (9 * 3600)
 			await self.room_manager.set_room(f'game_room_{roomId}', room)
 
-			roomType = room['roomType'] 
+			roomType = room['roomType']
 			if roomType == 1:
 				# Final room
 				final_room_id = f"{roomId}_final"

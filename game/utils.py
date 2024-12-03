@@ -38,12 +38,13 @@ class RoomStateManager:
 		print("set Room id:", room_id, sys.stderr)
 		print("set Room:", room, sys.stderr)
 		
-		if  (int(room['roomType']) == 3 or int(room['roomType'] == 4)) and int(room['version']) == 0:
-			print("set Room id:", room_id, sys.stderr)
+		if (int(room['roomType']) == 3 or int(room['roomType'] == 4)) and int(room['version']) == 0:
+			print("room is final or 3rd place", sys.stderr)
 			await sync_to_async(cache.set)(room_id, room)
 			return
 			
 		if room['host'] is None:
+			print("room host is None", sys.stderr)
 			await sync_to_async(cache.delete)(room_id)
 		else:
 			await sync_to_async(cache.set)(room_id, room)
@@ -112,7 +113,7 @@ class RoomStateManager:
 	async def apply_update_safely(self, room_id: str, update_type: str, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 		"""안전한 업데이트 적용"""
 		async def perform_update(current_room: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-			if current_room is None or (current_room.get('host') is None and current_room.get('roomType') not in [3, 4]):
+			if (current_room is None or (current_room.get('host') is None) and current_room.get('roomType') not in [3, 4]):
 				logger.debug(f"No valid room found for room_id {room_id}")
 				return None
 
@@ -127,9 +128,10 @@ class RoomStateManager:
 					}
 					if player_data['intraId'] not in [p['intraId'] for p in updated_room.get('players', [])]:
 						updated_room.setdefault('players', []).append(player_data)
+						print("players:", updated_room['players'], sys.stderr)
 					if not updated_room.get('host'):
 						updated_room['host'] = player_data['nickname']
-							
+						print("host:", updated_room['host'], sys.stderr)	
 				elif update_type == "remove_player":
 					updated_room['players'] = [
 						p for p in updated_room.get('players', [])
