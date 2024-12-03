@@ -231,7 +231,9 @@ CHANNEL_LAYERS = {
         'CONFIG': {
             'hosts': [(REDIS, 6379)],
             'capacity': 1500,
-            'expiry': 60,
+            'channel_capacity': {
+                'game.*': 100,
+            },
         },
     },
 }

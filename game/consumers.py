@@ -658,12 +658,12 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			self.game_state['disconnected_player'].remove(self.nickname)
 			is_reconnecting = True
 
-			if not self.game_state['disconnected_player']:
-				self.game_state['is_paused'] = False
-				self.game_state['pause_start_time'] = None
-				if self.pause_task and not self.pause_task.done():
-					self.pause_task.cancel()
-					self.pause_task = None
+			# if not self.game_state['disconnected_player']:
+			# 	self.game_state['is_paused'] = False
+			# 	self.game_state['pause_start_time'] = None
+			# 	if self.pause_task and not self.pause_task.done():
+			# 		self.pause_task.cancel()
+			# 		self.pause_task = None
 			
 		
 		
@@ -743,6 +743,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 
 	async def send_reconnection_state(self):
+		print(f"Sending reconnection state to {self.nickname}", file=sys.stderr)
+		print(f"Game Score: {self.game_state['score']}", file=sys.stderr)
 		current_state = {
 			'type': 'initial_game_state',
 			'ball': self.game_state['ball'],  # 이미 scale 포함
@@ -939,24 +941,30 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 
 		self.physics.game_started = True
+		self.last_update_time = time.time()
+		frame_count = 0
 		while self.game_state['game_started']:
+			loop_start = time.time()
 			if not self.game_state['is_paused']:  # 공유 상태로 체크
 				current_time = time.time()
-				delta_time = current_time - self.last_update_time
-				
-				if delta_time >= self.FRAME_TIME:
-					await self.update_game_state()
-					self.last_update_time = current_time
-				next_frame_time = self.last_update_time + self.FRAME_TIME
-				sleep_time = max(0, next_frame_time - time.time())
-				if sleep_time > 0:
-					await asyncio.sleep(sleep_time)
+				update_task = asyncio.create_task(self.update_game_state())
+				frame_duration = time.time() - loop_start
+				sleep_duration = max(0, self.FRAME_TIME - frame_duration)
+				await asyncio.gather(
+					update_task,
+					asyncio.sleep(sleep_duration)
+				)
+				self.last_update_time = current_time
+				frame_count += 1
+				if frame_count % 100 == 0:
+					actual_fps = 100 / (time.time() - loop_start)
+					print(f"Current FPS: {actual_fps:.2f}", file=sys.stderr)
 			else:
 				await asyncio.sleep(self.FRAME_TIME)
 
 	async def update_game_state(self):
 		current_time = time.time()
-		delta_time = current_time - self.last_update_time
+		delta_time = min(current_time - self.last_update_time, 1/30)
 		
 		# 로그 추가
 		logger.debug(f"Raw delta time: {delta_time}")
