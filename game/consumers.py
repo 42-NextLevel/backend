@@ -19,95 +19,112 @@ class GameConsumer(AsyncWebsocketConsumer):
 		self.user_data = None
 		self.room_state_manager = RoomStateManager()
 	async def connect(self):
-		self.room_id = self.scope['url_route']['kwargs']['room_id']
-		self.room_group_name = f'room_{self.room_id}'
-		print("Cookies: ", self.scope['cookies'], file=sys.stderr)
-		query_string = self.scope['query_string'].decode()
-		query_params = parse_qs(query_string)
-		
 		try:
-			room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
-			if not room:
-				print(f"WebSocket REJECT - Room not found: {self.room_id}", file=sys.stderr)
-				print(f"Cache key used: game_room_{self.room_id}", file=sys.stderr)
+			# 1. 기본 설정 및 파라미터 검증
+			self.room_id = self.scope['url_route']['kwargs']['room_id']
+			self.room_group_name = f'room_{self.room_id}'
+			query_string = self.scope['query_string'].decode()
+			query_params = parse_qs(query_string)
+			
+			intra_id = query_params.get('intraId', [None])[0]
+			nickname = query_params.get('nickname', [None])[0]
+			
+			if not nickname or not intra_id:
+				print(f"WebSocket REJECT - Missing parameters:", file=sys.stderr)
+				print(f"- Nickname provided: {nickname}", file=sys.stderr)
+				print(f"- Intra ID provided: {intra_id}", file=sys.stderr)
 				await self.close()
 				return
-		except Exception as e:
-			print(f"WebSocket REJECT - Error getting room: {e}", file=sys.stderr)
-			print(f"Attempted room_id: {self.room_id}", file=sys.stderr)
-			await self.close()
-			return
-		
-		intra_id = query_params.get('intraId', [None])[0]
-		nickname = query_params.get('nickname', [None])[0]
-		print(f"nickname: {nickname}, intra_id: {intra_id}", file=sys.stderr)
-		print(f"room_id: {self.room_id}", file=sys.stderr)
-		print(f"room_group_name: {self.room_group_name}", file=sys.stderr)
-		print(f"Room data: {room}", file=sys.stderr)  # 룸 데이터 출력
-		
-		if not nickname or not intra_id:
-			print(f"WebSocket REJECT - Missing parameters:", file=sys.stderr)
-			print(f"- Nickname provided: {nickname}", file=sys.stderr)
-			print(f"- Intra ID provided: {intra_id}", file=sys.stderr)
-			print(f"- Query parameters: {query_params}", file=sys.stderr)
-			print(f"- Full query string: {query_string}", file=sys.stderr)
-			await self.close()
-			return
 
-		try:
-			user: User = await self.get_user(intra_id)
-			if not user:
-				print(f"WebSocket REJECT - User not found for intra_id: {intra_id}", file=sys.stderr)
+			# 2. 유저 검증
+			try:
+				user: User = await self.get_user(intra_id)
+				if not user:
+					print(f"WebSocket REJECT - User not found for intra_id: {intra_id}", file=sys.stderr)
+					await self.close()
+					return
+				self.user_data = {'intraId': intra_id, 'nickname': nickname, 'profileImage': user.profile_image}
+			except Exception as e:
+				print(f"WebSocket REJECT - Error getting user data: {e}", file=sys.stderr)
 				await self.close()
 				return
-			self.user_data = {'intraId': intra_id, 'nickname': nickname, 'profileImage': user.profile_image}
+
+			# 3. 방 상태 검증
+			try:
+				room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
+				if not room:
+					print(f"WebSocket REJECT - Room not found: {self.room_id}", file=sys.stderr)
+					await self.close()
+					return
+
+				print(f"Room data: {room}", file=sys.stderr)
+				
+				# 이미 게임이 시작된 경우 체크
+				if room.get('game_started'):
+					print(f"WebSocket REJECT - Game already started in room: {self.room_id}", file=sys.stderr)
+					await self.close()
+					return
+
+				# 토너먼트 방인 경우 추가 검증
+				room_type = int(room.get('roomType', '0'))
+				if room_type in [3, 4]:
+					if len(room.get('players', [])) >= 2:
+						print(f"WebSocket REJECT - Tournament room is full: {self.room_id}", file=sys.stderr)
+						await self.close()
+						return
+
+				# 4. 모든 검증이 통과된 경우에만 연결 수락
+				await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+				await self.accept()
+				
+				# 5. 방 상태 업데이트
+				result = await self.update_room_players(add=True)
+				if not result:
+					print(f"WebSocket REJECT - Failed to update room players: {self.room_id}", file=sys.stderr)
+					await self.close()
+					return
+
+			except Exception as e:
+				print(f"WebSocket REJECT - Error in connection process: {e}", file=sys.stderr)
+				await self.close()
+				return
+
 		except Exception as e:
-			print(f"WebSocket REJECT - Error getting user data: {e}", file=sys.stderr)
-			print(f"Attempted intra_id: {intra_id}", file=sys.stderr)
-			await self.close()
-			return
-
-		try:
-			await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-			await self.accept()
-			await self.update_room_players(add=True)
-
-
-		except Exception as e:
-			print(f"WebSocket REJECT - Error in final connection steps: {e}", file=sys.stderr)
+			print(f"WebSocket REJECT - Unexpected error: {e}", file=sys.stderr)
 			await self.close()
 			return
 
 	async def disconnect(self, close_code):
 		try:
-			if hasattr(self, 'user_data'):
-				result = await self.update_room_players(add=False)  # result 받기
-				
-			# room이 없는 경우 처리
+			# 1. 방 상태 확인
 			room = await self.room_state_manager.get_room(f'game_room_{self.room_id}')
 			if not room:
 				await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 				return
+
+			# 2. 플레이어 제거
+			if hasattr(self, 'user_data'):
+				result = await self.update_room_players(add=False)
 				
+			# 3. 토너먼트 방 특별 처리
 			match_type = int(room.get('roomType', '0'))
-			
-			# tournament 게임(3, 4번 매치)에서 게임 시작 전 유저 나가면 destroy
 			if (match_type in [3, 4]) and not room['game_started']:
 				await self.send_destroy_event(
-					room_id=self.room_id,
-					reason="플레어아가 나갔기 때문에 더 이상 진행할 수 없습니다.",
+					reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
 				)
 				await self.room_state_manager.remove_room_safely(self.room_id)
 				print(f"Deleted tournament room {self.room_id}", file=sys.stderr)
-			# 일반 게임에서 모든 플레이어가 나가고 게임 시작 전이면 삭제
-			elif room and room.get('players') and len(room['players']) == 0 and not room['game_started']:
+				
+			# 4. 일반 방 처리 (플레이어가 없는 경우)
+			elif not room.get('game_started') and len(room.get('players', [])) == 0:
 				print(f"Empty room {self.room_id} deleted", file=sys.stderr)
 				await self.room_state_manager.remove_room_safely(self.room_id)
-				
+
+			# 5. 연결 해제
 			await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 			
 		except Exception as e:
-			logger.error(f"Error in disconnect: {e}")
+			print(f"Error in disconnect: {e}", file=sys.stderr)
 			await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
 
