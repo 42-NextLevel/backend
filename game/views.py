@@ -213,7 +213,7 @@ class GameRoomViewSet(viewsets.ViewSet):
 		response = {}
 		roomId = request.data.get('roomId')
 		print("roomId", roomId, sys.stderr)
-		room = cache.get(f'game_room_{roomId}')
+		room = self.room_manager.get_room(f'game_room_{roomId}')
 		print("room", room, sys.stderr)
 		if not room:
 			return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
