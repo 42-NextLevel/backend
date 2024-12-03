@@ -1011,18 +1011,20 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		await self.broadcast_partial_state()
 
 	async def game_end(self, event):
+		
+		# 게임 상태 초기화
+		self.game_state['game_started'] = False
+		if self.backup_task:
+			self.backup_task.cancel()
+
 		await self.send(text_data=json.dumps({
 			'type': 'game_end',
 			'winner': event['winner'],
 			'match': event['match']
 		}))
 		
-		# 게임 상태 초기화
-		self.game_state['game_started'] = False
-		if self.backup_task:
-			self.backup_task.cancel()
-		
-		await self.handle_game_end_cleanup(event)
+		# 비동기 처리
+		asyncio.create_task(self.handle_game_end_cleanup(event))
 
 	async def handle_game_end_cleanup(self, event):
 		game_cache_key = f'game_status_{self.game_id}'
@@ -1033,8 +1035,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			await self.save_game_log(event['winner'])
 		await self.handle_deserter(event)
 		
-		# 8초 대기 후 cleanup
-		await asyncio.sleep(8)
+		await asyncio.sleep(3)
 		GameState.remove_game(self.game_id)
 
 	# 탈주자 처리

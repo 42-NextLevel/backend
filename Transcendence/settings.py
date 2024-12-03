@@ -242,33 +242,32 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+        'websocket': {
+            'format': '{asctime} {message}',
             'style': '{',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'websocket',
         },
     },
     'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-        },
         'django.channels.server': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': 'INFO',
+            'propagate': False,
+            'filters': ['websocket_events'],
         },
-        'channels': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
-        },
-        'daphne': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
+    },
+    'filters': {
+        'websocket_events': {
+            '()': 'django.utils.log.CallbackFilter',
+            'callback': lambda record: any(
+                msg in record.getMessage() 
+                for msg in ['WebSocket CONNECT', 'WebSocket HANDSHAKING', 'WebSocket DISCONNECT']
+            ),
         },
     },
 }
