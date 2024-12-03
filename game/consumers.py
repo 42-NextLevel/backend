@@ -79,12 +79,6 @@ class GameConsumer(AsyncWebsocketConsumer):
 			return
 
 	async def disconnect(self, close_code):
-		if self.update_task:
-			self.update_task.cancel()
-		try:
-			await self.update_task
-		except asyncio.CancelledError:
-			pass
 		try:
 			if hasattr(self, 'user_data'):
 				result = await self.update_room_players(add=False)  # result 받기
