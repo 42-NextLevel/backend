@@ -104,6 +104,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 			# 2. 플레이어 제거
 			if hasattr(self, 'user_data'):
+				print(f"Removing player {self.user_data['nickname']} from room {self.room_id}", file=sys.stderr)
 				result = await self.update_room_players(add=False)
 				
 			# 3. 토너먼트 방 특별 처리
@@ -1021,8 +1022,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if self.backup_task:
 			self.backup_task.cancel()
 		
-		# 비동기로 처리하여 blocking 방지
-		asyncio.create_task(self.handle_game_end_cleanup(event))
+		await self.handle_game_end_cleanup(event)
 
 	async def handle_game_end_cleanup(self, event):
 		game_cache_key = f'game_status_{self.game_id}'
@@ -1031,7 +1031,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		# 게임 로그 저장 등의 작업을 별도 태스크로
 		if self.player_number == event['winner']:  # 승자만 저장 작업 수행
 			await self.save_game_log(event['winner'])
-			await self.handle_deserter(event)
+		await self.handle_deserter(event)
 		
 		# 8초 대기 후 cleanup
 		await asyncio.sleep(8)
