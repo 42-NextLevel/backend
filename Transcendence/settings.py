@@ -224,13 +224,51 @@ SIMPLE_JWT = {
 
 ASGI_APPLICATION = 'Transcendence.asgi.application'
 
+ASGI_TIMEOUT = 60  # seconds
 CHANNEL_LAYERS = {
-	'default': {
-		'BACKEND': 'channels_redis.core.RedisChannelLayer',
-		'CONFIG': {
-			'hosts': [(REDIS, 6379)],
-		},
-	},
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [(REDIS, 6379)],
+            'capacity': 1500,
+            'expiry': 60,
+        },
+    },
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'django.channels.server': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+        'channels': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+        'daphne': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+    },
 }
 
 ALLOWED_HOSTS = ["*"]  # 개발 환경에서만 사용
