@@ -108,13 +108,13 @@ class GameConsumer(AsyncWebsocketConsumer):
 				result = await self.update_room_players(add=False)
 				
 			# 3. 토너먼트 방 특별 처리
-			match_type = int(room.get('roomType', '0'))
-			if (match_type in [3, 4]) and not room['game_started']:
-				await self.send_destroy_event(
-					reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
-				)
-				await self.room_state_manager.remove_room_safely(self.room_id)
-				print(f"Deleted tournament room {self.room_id}", file=sys.stderr)
+			# match_type = int(room.get('roomType', '0'))
+			# if (match_type in [3, 4]) and not room['game_started']:
+			# 	await self.send_destroy_event(
+			# 		reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
+			# 	)
+			# 	await self.room_state_manager.remove_room_safely(self.room_id)
+			# 	print(f"Deleted tournament room {self.room_id}", file=sys.stderr)
 				
 			# 4. 일반 방 처리 (플레이어가 없는 경우)
 			elif not room.get('game_started') and len(room.get('players', [])) == 0:
@@ -1011,20 +1011,37 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		await self.broadcast_partial_state()
 
 	async def game_end(self, event):
-		
-		# 게임 상태 초기화
-		self.game_state['game_started'] = False
-		if self.backup_task:
-			self.backup_task.cancel()
+		try:
+			# 게임 종료 메시지 전송
+			
+			
+			# 게임 상태 초기화
+			self.game_state['game_started'] = False
+			if self.backup_task:
+				self.backup_task.cancel()
+				
+			# 채널 연결 정리
+			
+			# cleanup 처리
+			await self.handle_game_end_cleanup(event)
 
-		await self.send(text_data=json.dumps({
-			'type': 'game_end',
-			'winner': event['winner'],
-			'match': event['match']
-		}))
-		
-		# 비동기 처리
-		asyncio.create_task(self.handle_game_end_cleanup(event))
+			# sleep 1초
+			await asyncio.sleep(1)
+
+
+
+			await self.send(text_data=json.dumps({
+				'type': 'game_end',
+				'winner': event['winner'],
+				'match': event['match']
+			}))
+			await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
+			
+		except Exception as e:
+			print(f"Error in game_end: {e}", file=sys.stderr)
+			# 에러가 발생해도 채널은 정리
+			await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
+			
 
 	async def handle_game_end_cleanup(self, event):
 		game_cache_key = f'game_status_{self.game_id}'
@@ -1035,7 +1052,6 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 			await self.save_game_log(event['winner'])
 		await self.handle_deserter(event)
 		
-		await asyncio.sleep(3)
 		GameState.remove_game(self.game_id)
 
 	# 탈주자 처리
