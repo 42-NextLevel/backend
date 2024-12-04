@@ -164,7 +164,7 @@ class AuthCodeView(APIView, SecurityMixin):
 class AuthEmailView(APIView, SecurityMixin):
     """이메일 등록 및 인증 메일 발송 뷰"""
     
-    @rate_limit("email_auth", max_attempts=40, timeout=900)
+    @rate_limit("email_auth", max_attempts=100, timeout=900)
     @transaction.atomic
     def post(self, request):
         try:

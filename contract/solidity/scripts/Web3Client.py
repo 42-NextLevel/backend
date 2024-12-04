@@ -141,36 +141,52 @@ class Web3Client:
 
 	async def add_match_history(self, game_id: int, match_info: tuple) -> str:
 		"""새로운 매치 히스토리 추가"""
-		contract = self.get_contract()
-		
-		# 트랜잭션 생성을 비동기로 처리
-		get_nonce = sync_to_async(self.w3.eth.get_transaction_count)
-		get_gas_price = sync_to_async(lambda: self.w3.eth.gas_price * 2)
-		
-		nonce = await get_nonce(self.account.address)
-		gas_price = await get_gas_price()
-		
-		# build_transaction을 비동기로 처리
-		build_tx = sync_to_async(contract.functions.addHistory(game_id, match_info).build_transaction)
-		txn = await build_tx({
-			'from': self.account.address,
-			'nonce': nonce,
-			'gas': 2000000,
-			'gasPrice': gas_price,
-			'chainId': 11155111
-		})
+		try:
+			contract = self.get_contract()
+			
+			# 트랜잭션 생성을 비동기로 처리
+			get_nonce = sync_to_async(self.w3.eth.get_transaction_count)
+			get_gas_price = sync_to_async(lambda: self.w3.eth.gas_price)
+			
+			nonce = await get_nonce(self.account.address)
+			base_gas_price = await get_gas_price()
+			gas_price = int(base_gas_price * 1.5)  # 50% 더 높은 gas price
+			
+			# build_transaction을 비동기로 처리
+			build_tx = sync_to_async(contract.functions.addHistory(game_id, match_info).build_transaction)
+			
+			# 최대 3번 시도
+			for attempt in range(3):
+				try:
+					txn = await build_tx({
+						'from': self.account.address,
+						'nonce': nonce,
+						'gas': 2000000,
+						'gasPrice': gas_price * (attempt + 1),  # 각 시도마다 gas price 증가
+						'chainId': 11155111
+					})
 
-		# 트랜잭션 서명
-		sign_tx = sync_to_async(self.w3.eth.account.sign_transaction)
-		signed_txn = await sign_tx(txn, os.environ.get('ETHEREUM_PRIVATE_KEY'))
-		
-		# 트랜잭션 전송
-		send_raw_tx = sync_to_async(self.w3.eth.send_raw_transaction)
-		tx_hash = await send_raw_tx(signed_txn.raw_transaction)
-		
-		# 트랜잭션 영수증 대기를 비동기로 처리
-		wait_for_tx = sync_to_async(self.w3.eth.wait_for_transaction_receipt)
-		tx_receipt = await wait_for_tx(tx_hash)
-		
-		print(f"Transaction successful! Hash: {tx_hash.hex()}")
-		return tx_hash.hex()
+					# 트랜잭션 서명
+					sign_tx = sync_to_async(self.w3.eth.account.sign_transaction)
+					signed_txn = await sign_tx(txn, os.environ.get('ETHEREUM_PRIVATE_KEY'))
+					
+					# 트랜잭션 전송
+					send_raw_tx = sync_to_async(self.w3.eth.send_raw_transaction)
+					tx_hash = await send_raw_tx(signed_txn.raw_transaction)
+					
+					# 트랜잭션 영수증 대기를 비동기로 처리
+					wait_for_tx = sync_to_async(self.w3.eth.wait_for_transaction_receipt)
+					tx_receipt = await wait_for_tx(tx_hash)
+					return tx_hash.hex()
+					
+				except Exception as e:
+					if 'replacement transaction underpriced' in str(e):
+						print(f"Attempt {attempt + 1} failed with underpriced error, retrying with higher gas price...")
+						if attempt == 2:  # 마지막 시도였다면
+							raise
+						continue
+					raise  # 다른 종류의 에러면 바로 예외 발생
+					
+		except Exception as e:
+			print(f"Transaction failed after all attempts: {str(e)}")
+			return None  # 실패 시 None 반환하여 호출자가 처리할 수 있도록 함

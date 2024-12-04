@@ -247,6 +247,15 @@ LOGGING = {
             'style': '{',
         },
     },
+    'filters': {
+        'websocket_events': {
+            '()': 'django.utils.log.CallbackFilter',
+            'callback': lambda record: any(
+                msg in record.getMessage() 
+                for msg in ['WebSocket CONNECT', 'WebSocket HANDSHAKING', 'WebSocket DISCONNECT']
+            ),
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
@@ -257,17 +266,8 @@ LOGGING = {
         'django.channels.server': {
             'handlers': ['console'],
             'level': 'INFO',
-            'propagate': False,
             'filters': ['websocket_events'],
-        },
-    },
-    'filters': {
-        'websocket_events': {
-            '()': 'django.utils.log.CallbackFilter',
-            'callback': lambda record: any(
-                msg in record.getMessage() 
-                for msg in ['WebSocket CONNECT', 'WebSocket HANDSHAKING', 'WebSocket DISCONNECT']
-            ),
+            'propagate': False,
         },
     },
 }

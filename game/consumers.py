@@ -10,6 +10,7 @@ import time
 from game.utils import RoomStateManager
 ROOM_TIMEOUT = 3600  # 1 hour
 import asyncio
+import subprocess
 
 class GameConsumer(AsyncWebsocketConsumer):
 	def __init__(self, *args, **kwargs):
@@ -1012,34 +1013,28 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 
 	async def game_end(self, event):
 		try:
-			# 게임 종료 메시지 전송
-			
-			
-			# 게임 상태 초기화
-			self.game_state['game_started'] = False
-			if self.backup_task:
-				self.backup_task.cancel()
-				
-			# 채널 연결 정리
-			
-			# cleanup 처리
-			await self.handle_game_end_cleanup(event)
-
-			# sleep 1초
-			await asyncio.sleep(1)
-
-
-
+			# 1. 먼저 게임 종료 메시지를 클라이언트에 전송
 			await self.send(text_data=json.dumps({
 				'type': 'game_end',
 				'winner': event['winner'],
 				'match': event['match']
 			}))
+			
+			# 3. 게임 상태 초기화
+			self.game_state['game_started'] = False
+			if self.backup_task:
+				self.backup_task.cancel()
+			
+			# 4. cleanup 처리
+			await self.handle_game_end_cleanup(event)
+			
+			# 5. 충분한 시간을 두고 채널 정리
+			
+			# 6. 마지막으로 채널 연결 정리
 			await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
 			
 		except Exception as e:
 			print(f"Error in game_end: {e}", file=sys.stderr)
-			# 에러가 발생해도 채널은 정리
 			await self.channel_layer.group_discard(self.game_group_name, self.channel_name)
 			
 
@@ -1049,6 +1044,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 		# 게임 로그 저장 등의 작업을 별도 태스크로
 		if self.player_number == event['winner']:  # 승자만 저장 작업 수행
+			print(f"Saving game log for {self.game_id}", file=sys.stderr)
+			print("winner:", event['winner'], file=sys.stderr)
 			await self.save_game_log(event['winner'])
 		await self.handle_deserter(event)
 		
@@ -1081,41 +1078,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		
 
 	
-	async def save_blockchain_data(self, players, room_copy):
-		try:
-			if not os.environ.get('ETHEREUM_PRIVATE_KEY') or not os.environ.get('WEB3_PROVIDER_URL'):
-				print("Missing required environment variables", file=sys.stderr)
-				return None
 
-			game_id = await sync_to_async(lambda: GameLog.objects.latest('id').id)()
-			
-
-			def sync_blockchain_operations():
-				web3_client = Web3Client()
-				start_time = datetime.utcfromtimestamp(room_copy['started_at']).strftime('%Y-%m-%d %H:%M:%S')  # datetime을 str로 변환
-
-				
-				match_info = web3_client.make_match_struct(
-					start_time=start_time,
-					match_type=int(self.match),
-					user1=str(players[0]['intraId']),
-					user2=str(players[1]['intraId']), 
-					nick1=str(players[0]['nickname']),
-					nick2=str(players[1]['nickname']),
-					score1=int(self.game_state['score']['player1']),
-					score2=int(self.game_state['score']['player2'])
-				)
-				return web3_client, match_info
-
-			web3_client, match_info = await asyncio.get_event_loop().run_in_executor(self.executor, sync_blockchain_operations)
-			tx_hash = await web3_client.add_match_history(game_id, match_info)
-			print(f"Transaction sent. Hash: {tx_hash}", file=sys.stderr)
-			return tx_hash
-
-		except Exception as e:
-			print(f"Error in blockchain operation: {str(e)}", file=sys.stderr)
-			traceback.print_exc(file=sys.stderr)
-			return None
 
 	@sync_to_async
 	def create_game_log(self, start_time, match_type):
@@ -1153,6 +1116,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 	async def save_game_log(self, winner):
 		print(f"Saving game log for {self.game_id}", file=sys.stderr)
 		# winner만 게임을 저장하도록 수정
+		print("self.player_number:", self.player_number, file=sys.stderr)
 		if self.player_number != winner:
 			return
 		
@@ -1209,10 +1173,22 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					)
 				else:
 					print(f"User not found for {player_data['nickname']}", file=sys.stderr)
+
 			
-			# 블록체인 저장
-			loop = asyncio.get_event_loop()
-			loop.create_task(self.save_blockchain_data(players, room.copy()))
+				try:
+					subprocess.Popen([
+						"python",
+						"/usr/src/app/contract/solidity/scripts/save_blockchain_worker.py",
+						str(str(game_log.id),),
+						json.dumps(players),
+						json.dumps(room),
+						json.dumps(self.game_state),
+						str(self.match),
+					])
+
+					print("Started blockchain save process.")
+				except Exception as e:
+					print(f"Failed to start save process: {e}", file=sys.stderr)
 			print(f"Game log saved: {game_log}", file=sys.stderr)
 			
 			# 캐시 처리
