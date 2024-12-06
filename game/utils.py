@@ -40,7 +40,7 @@ class RoomStateManager:
 		
 		if (int(room['roomType']) == 3 or int(room['roomType']) == 4) and int(room['version']) == 0:
 			print("room is final or 3rd place", sys.stderr)
-			await sync_to_async(cache.set)(room_id, room)
+			await sync_to_async(cache.set)(room_id, room, timeout=30 * 60)
 			return
 			
 		if room['host'] is None and int(room['roomType']) not in [3, 4]:
