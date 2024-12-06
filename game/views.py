@@ -149,6 +149,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 
 			if (room['roomType'] == 0 and len(room['players']) != 2) or (room['roomType'] == 1 and len(room['players']) != 4):
 				return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
+			if (room['roomType'] in [3, 4] and len(room['players']) != 2):
+				return Response({'error': 'Not enough players'}, status=status.HTTP_400_BAD_REQUEST)
 
 			room['game_started'] = True
 			room['started_at'] = time.time() + (9 * 3600)
