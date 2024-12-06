@@ -57,6 +57,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 					print(f"WebSocket REJECT - Room not found: {self.room_id}", file=sys.stderr)
 					await self.close()
 					return
+				
 
 				print(f"Room data: {room}", file=sys.stderr)
 				
@@ -77,6 +78,15 @@ class GameConsumer(AsyncWebsocketConsumer):
 				# 4. 모든 검증이 통과된 경우에만 연결 수락
 				await self.channel_layer.group_add(self.room_group_name, self.channel_name)
 				await self.accept()
+				# room에 탈주자가 있는 경우 destroy 이벤트 전송
+				if room_type in [3, 4] and room.get('disconnected', 0) > 0:
+					self.send_destroy_event(
+						reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
+					)
+					await self.close()
+					return
+				
+
 				
 				# 5. 방 상태 업데이트
 				result = await self.update_room_players(add=True)
