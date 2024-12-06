@@ -119,13 +119,11 @@ class GameConsumer(AsyncWebsocketConsumer):
 				result = await self.update_room_players(add=False)
 				
 			# 3. 토너먼트 방 특별 처리
-			# match_type = int(room.get('roomType', '0'))
-			# if (match_type in [3, 4]) and not room['game_started']:
-			# 	await self.send_destroy_event(
-			# 		reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
-			# 	)
-			# 	await self.room_state_manager.remove_room_safely(self.room_id)
-			# 	print(f"Deleted tournament room {self.room_id}", file=sys.stderr)
+			match_type = int(room.get('roomType', '0'))
+			if (match_type in [3, 4]) and not room['game_started']:
+				await self.send_destroy_event(
+					reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
+				)
 				
 			# 4. 일반 방 처리 (플레이어가 없는 경우)
 			elif not room.get('game_started') and len(room.get('players', [])) == 0:
