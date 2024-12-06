@@ -125,6 +125,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 				await self.send_destroy_event(
 					reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
 				)
+				await self.room_state_manager.remove_room_safely(self.room_id)
 				
 			# 4. 일반 방 처리 (플레이어가 없는 경우)
 			elif not room.get('game_started') and len(room.get('players', [])) == 0:
