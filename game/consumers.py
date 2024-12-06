@@ -78,13 +78,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 				# 4. 모든 검증이 통과된 경우에만 연결 수락
 				await self.channel_layer.group_add(self.room_group_name, self.channel_name)
 				await self.accept()
-				# room에 탈주자가 있는 경우 destroy 이벤트 전송
-				if room_type in [3, 4] and room.get('disconnected', 0) > 0:
-					self.send_destroy_event(
-						reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
-					)
-					await self.close()
-					return
+				
 				
 
 				
@@ -94,6 +88,13 @@ class GameConsumer(AsyncWebsocketConsumer):
 					print(f"WebSocket REJECT - Failed to update room players: {self.room_id}", file=sys.stderr)
 					await self.close()
 					return
+				
+				if room_type in [3, 4] and room.get('disconnected', 0) > 0:
+					print(f"Sending destroy event for disconnected players", file=sys.stderr)
+					await self.send_destroy_event(
+						reason="플레이어가 나갔기 때문에 더 이상 진행할 수 없습니다."
+					)
+
 
 			except Exception as e:
 				print(f"WebSocket REJECT - Error in connection process: {e}", file=sys.stderr)
@@ -219,6 +220,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 
 	async def send_destroy_event(self, reason: str):
+		print("Sending destroy event", file=sys.stderr)
 		await self.channel_layer.group_send(
 			self.room_group_name,
 			{
@@ -229,8 +231,8 @@ class GameConsumer(AsyncWebsocketConsumer):
 
 	async def room_destroy(self, event):
 		await self.send(text_data=json.dumps({
-			'type': 'room_destroy',
-			'reason': event['reason']
+			'type': 'destroy',
+			'data': event['reason']
 		}))
 
 
@@ -806,6 +808,8 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		return None
 
 	async def disconnect(self, close_code):
+		if self.game_state is None:
+			return
 		# 남은 플레이어에게 승리 메시지 전송
 		game_loop_task = GameState.get_game_task(self.game_id)
 		if game_loop_task:
@@ -1066,7 +1070,10 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 		if len(self.game_state['disconnected_player']) == 1:
 			# 한 게임에서 1명 탈주한 경우 3rd 룸 처리
 			print("Handling 3rd room disconnect", file=sys.stderr)
-			room_3rd = await self.room_state_manager.get_room(f'game_room_{self.game_id}_3rd')
+			game_id = self.game_id.split('_')[0]
+			room_3rd = await self.room_state_manager.get_room(f'game_room_{game_id}_3rd')
+			print(f"Room 3rd: {room_3rd}", file=sys.stderr)
+			print(f"game_room_{game_id}_3rd", file=sys.stderr)
 			if room_3rd:
 				num_disconnected = int(room_3rd.get('disconnected', 0))
 				print(f"Num disconnected in 3rd room: {num_disconnected}", file=sys.stderr)
@@ -1077,7 +1084,7 @@ class GamePingPongConsumer(AsyncWebsocketConsumer):
 					room_3rd['disconnected'] = num_disconnected + 1
 					try:
 						await self.room_state_manager.apply_update_safely(
-							f'game_room_{self.game_id}_3rd',
+							f'game_room_{game_id}_3rd',
 							'update_game_state',
 							room_3rd, 
 						)
