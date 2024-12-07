@@ -52,6 +52,41 @@ class GameRoomViewSet(viewsets.ViewSet):
 			game_room_datas.sort(key=lambda x: x['created_at'], reverse=True)
 			return Response(game_room_datas, status=status.HTTP_200_OK)
 		return async_list()
+	
+	def validate_room_name(slef, room_name):
+		# 1. 기본 길이 체크
+		if not room_name or len(room_name) < 2 or len(room_name) > 10:
+			return False, '방 이름은 2-10자 사이여야 합니다'
+		
+		# 2. 공백 관련 체크
+		if not room_name.strip():
+			return False, '방 이름은 공백으로만 이루어질 수 없습니다'
+		
+		# 3. 연속된 공백 체크
+		if '  ' in room_name:
+			return False, '연속된 공백은 사용할 수 없습니다'
+		
+		# 4. 특수문자 체크
+		special_chars = '<>{}[]()/"\'`'
+		if any(char in room_name for char in special_chars):
+			return False, '사용할 수 없는 특수문자가 포함되어 있습니다'
+		
+		# 5. 이모지 체크 (선택적)
+		emoji_pattern = re.compile("["
+			u"\U0001F600-\U0001F64F"  # emoticons
+			u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+			u"\U0001F680-\U0001F6FF"  # transport & map symbols
+			u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+			"]+", flags=re.UNICODE)
+		if emoji_pattern.search(room_name):
+			return False, '이모지는 사용할 수 없습니다'
+		
+		# 6. 반복 문자 체크
+		if re.search(r'(.)\1{3,}', room_name):
+			return False
+		
+		return True, None
+
 
 	def create(self, request):
 		nickname = request.data.get('nickname')
@@ -63,12 +98,9 @@ class GameRoomViewSet(viewsets.ViewSet):
 		if not self.NICKNAME_PATTERN.match(nickname):
 			return Response({'error': '닉네임은 한글, 영문, 숫자만 사용할 수 있습니다'}, status=status.HTTP_400_BAD_REQUEST)
 
-		if not room_name or len(room_name) < 2 or len(room_name) > 10:
-			return Response({'error': '방 이름은 2-10자 사이여야 합니다'}, status=status.HTTP_400_BAD_REQUEST)
-		
-		# 공백으로만 이루어진 방 이름은 허용하지 않음
-		if not room_name.strip():
-			return Response({'error': '방 이름은 공백으로만 이루어질 수 없습니다'}, status=status.HTTP_400_BAD_REQUEST )
+		state, message = self.validate_room_name(room_name)
+		if state is False:
+			return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
 		# 닉네임에는 공백이 들어갈 수 없음
 		if ' ' in nickname:
 			return Response({'error': '닉네임에는 공백이 들어갈 수 없습니다'}, status=status.HTTP_400_BAD_REQUEST)
