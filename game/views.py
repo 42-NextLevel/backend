@@ -159,8 +159,8 @@ class GameRoomViewSet(viewsets.ViewSet):
 				return Response({'error': '다른 닉네임을 사용해주세요'}, status=status.HTTP_400_BAD_REQUEST)
 			
 			intra_id = CookieManager.get_intra_id_from_cookie(request)
-			# if any(player['intraId'] == intra_id for player in room['players']):
-				# return Response({'error': '이미 방에 참가하셨습니다'}, status=status.HTTP_400_BAD_REQUEST)
+			if any(player['intraId'] == intra_id for player in room['players']):
+				return Response({'error': '이미 방에 참가하셨습니다'}, status=status.HTTP_400_BAD_REQUEST)
 			user = await sync_to_async(User.get_by_intra_id)(intra_id)
 
 			response = Response(status=status.HTTP_200_OK)
